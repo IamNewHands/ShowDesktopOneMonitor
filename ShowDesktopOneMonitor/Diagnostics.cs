@@ -12,6 +12,10 @@ namespace ShowDesktopOneMonitor
     {
         private static readonly object Gate = new object();
 
+        // The log is capped: as soon as it would grow past this size it is rewritten
+        // with only its newest half, so the file stays small and recent history survives.
+        private const long MaxLogBytes = 1024 * 1024;
+
         // Preferred location: right next to the executable, so the file is easy to find.
         // Falls back to %LOCALAPPDATA% when that directory is not writable (for example
         // when the app was extracted under Program Files).
@@ -56,25 +60,61 @@ namespace ShowDesktopOneMonitor
             try {
                 lock (Gate) {
                     Directory.CreateDirectory(LogDirectory);
-                    StringBuilder line = new StringBuilder();
-                    line.Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-                    line.Append("  ");
-                    line.Append(message);
-                    if (exception != null) {
-                        line.Append(Environment.NewLine);
-                        line.Append("        ");
-                        line.Append(exception.GetType().FullName);
-                        line.Append(": ");
-                        line.Append(exception.Message);
-                        line.Append(Environment.NewLine);
-                        line.Append(exception.StackTrace);
-                    }
-                    line.Append(Environment.NewLine);
-                    File.AppendAllText(LogPath, line.ToString(), Encoding.UTF8);
+                    string line = Format(message, exception);
+                    TrimIfNeeded(line.Length);
+                    File.AppendAllText(LogPath, line, Encoding.UTF8);
                 }
             }
             catch (Exception) {
             }
+        }
+
+        private static string Format (string message, Exception exception)
+        {
+            StringBuilder line = new StringBuilder();
+            line.Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            line.Append("  ");
+            line.Append(message);
+            if (exception != null) {
+                line.Append(Environment.NewLine);
+                line.Append("        ");
+                line.Append(exception.GetType().FullName);
+                line.Append(": ");
+                line.Append(exception.Message);
+                line.Append(Environment.NewLine);
+                line.Append(exception.StackTrace);
+            }
+            line.Append(Environment.NewLine);
+            return line.ToString();
+        }
+
+        private static void TrimIfNeeded (int incomingLength)
+        {
+            try {
+                FileInfo info = new FileInfo(LogPath);
+                if (!info.Exists || info.Length + incomingLength <= MaxLogBytes) {
+                    return;
+                }
+                TrimLog();
+            }
+            catch (Exception) {
+            }
+        }
+
+        private static void TrimLog ()
+        {
+            string[] lines = File.ReadAllLines(LogPath, Encoding.UTF8);
+            int drop = lines.Length / 2;
+            if (drop <= 0) {
+                File.WriteAllText(LogPath, string.Empty, Encoding.UTF8);
+                return;
+            }
+
+            string[] kept = new string[lines.Length - drop];
+            Array.Copy(lines, drop, kept, 0, kept.Length);
+            kept[0] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                + "  --- log reached " + (MaxLogBytes / 1024) + " KB, dropped the oldest half ---";
+            File.WriteAllLines(LogPath, kept, Encoding.UTF8);
         }
     }
 }

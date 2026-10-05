@@ -71,6 +71,9 @@ icon, the hot key registrations, the `SetWindowsHookEx` result, every hot key pr
 many key events the hook has seen - enough to tell "the app never started", "the hook is
 dead" and "the hook is alive but the combo did not match" apart.
 
+The file is capped at 1 MB: once it would grow past that, its oldest half is dropped, so it
+never grows without bound.
+
 ## Building locally
 
 ```
