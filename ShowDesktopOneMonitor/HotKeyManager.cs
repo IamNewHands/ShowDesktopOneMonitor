@@ -325,7 +325,6 @@ namespace ShowDesktopOneMonitor
         // Diagnostics: proves the hook is alive and actually receiving key events.
         private static int _hookEventCount;
         private static int _reportedHookEventCount;
-        private static System.Threading.Timer _diagnosticsTimer;
 
         private static volatile MessageWindow _wnd;
         private static volatile IntPtr _hwnd;
@@ -340,20 +339,31 @@ namespace ShowDesktopOneMonitor
             messageLoop.Name = "MessageLoopThread";
             messageLoop.IsBackground = true;
             messageLoop.Start();
+        }
 
-            // Reports hook liveness without doing any I/O inside the hook callback.
-            _diagnosticsTimer = new System.Threading.Timer(delegate (object state)
-            {
-                int current = _hookEventCount;
-                if (current != _reportedHookEventCount) {
-                    _reportedHookEventCount = current;
-                    Diagnostics.Write("HotKeyManager: hook has received " + current + " key event(s)");
-                }
-            }, null, 30000, 30000);
+        /// <summary>
+        /// Reports hook liveness from the message loop that already exists.
+        ///
+        /// A WinForms timer is used instead of System.Threading.Timer on purpose: the
+        /// thread-pool variant wakes the process every 30 s, and because the pool retires
+        /// its idle threads in between, every tick forces the CLR to create a fresh worker
+        /// thread. That create/retire cycle was leaking roughly five kernel handles per
+        /// tick (measured: +18 handles in 125 s at idle, private memory flat). Timer
+        /// messages go through the existing message queue and cost nothing but a WM_TIMER.
+        /// </summary>
+        private static void ReportHookLiveness ()
+        {
+            int current = _hookEventCount;
+            if (current != _reportedHookEventCount) {
+                _reportedHookEventCount = current;
+                Diagnostics.Write("HotKeyManager: hook has received " + current + " key event(s)");
+            }
         }
 
         private class MessageWindow : Form
         {
+            private System.Windows.Forms.Timer _livenessTimer;
+
             public MessageWindow ()
             {
                 _wnd = this;
@@ -379,10 +389,20 @@ namespace ShowDesktopOneMonitor
                     throw new Win32Exception(lastError,
                         "SetWindowsHookEx failed, the hot key is unavailable");
                 }
+
+                _livenessTimer = new System.Windows.Forms.Timer();
+                _livenessTimer.Interval = 30000;
+                _livenessTimer.Tick += delegate (object sender, EventArgs eventArgs) { ReportHookLiveness(); };
+                _livenessTimer.Start();
             }
 
             protected override void OnHandleDestroyed (EventArgs e)
             {
+                if (_livenessTimer != null) {
+                    _livenessTimer.Stop();
+                    _livenessTimer.Dispose();
+                    _livenessTimer = null;
+                }
                 if (_hHook != IntPtr.Zero) {
                     Diagnostics.Write("HotKeyManager: unhooking, hook received " + _hookEventCount + " key event(s) total");
                     UnhookWindowsHookEx(_hHook);
