@@ -41,6 +41,7 @@ jobs:
             Copy-Item "$out/ShowDesktopOneMonitor.exe.config" dist/
           }
           Copy-Item README.md dist/
+          Copy-Item README.zh-CN.md dist/
           Compress-Archive -Path dist/* -DestinationPath ShowDesktopOneMonitor-win11.zip -Force
           Get-ChildItem dist | Format-Table Name, Length
 
