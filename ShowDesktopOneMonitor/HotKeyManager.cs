@@ -318,6 +318,15 @@ namespace ShowDesktopOneMonitor
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState (int vKey);
 
+        // Used to keep an eye on our own handle count from the liveness heartbeat; a rising
+        // handle count at idle is the signature of a leak. GetCurrentProcess returns a
+        // pseudo handle, so calling it costs nothing.
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetProcessHandleCount (IntPtr process, out uint handleCount);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess ();
+
         // Must be kept alive: a collected delegate would leave the hook pointing at freed memory.
         private static readonly LowLevelKeyboardProc _hookProcDelegate = HookProc;
         private static IntPtr _hHook = IntPtr.Zero;
@@ -325,6 +334,7 @@ namespace ShowDesktopOneMonitor
         // Diagnostics: proves the hook is alive and actually receiving key events.
         private static int _hookEventCount;
         private static int _reportedHookEventCount;
+        private static uint _reportedHandleCount;
 
         private static volatile MessageWindow _wnd;
         private static volatile IntPtr _hwnd;
@@ -353,11 +363,20 @@ namespace ShowDesktopOneMonitor
         /// </summary>
         private static void ReportHookLiveness ()
         {
-            int current = _hookEventCount;
-            if (current != _reportedHookEventCount) {
-                _reportedHookEventCount = current;
-                Diagnostics.Write("HotKeyManager: hook has received " + current + " key event(s)");
+            uint handles = 0;
+            GetProcessHandleCount(GetCurrentProcess(), out handles);
+
+            int events = _hookEventCount;
+            bool eventsChanged = events != _reportedHookEventCount;
+            bool handlesChanged = handles != _reportedHandleCount;
+            if (!eventsChanged && !handlesChanged) {
+                return;
             }
+
+            _reportedHookEventCount = events;
+            _reportedHandleCount = handles;
+            Diagnostics.Write("HotKeyManager: hook has received " + events
+                + " key event(s), process handles=" + handles);
         }
 
         private class MessageWindow : Form
