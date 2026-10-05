@@ -50,7 +50,8 @@ Requires .NET Framework 4.8 (built into Windows 10 2004+ and Windows 11).
 2. Create a task in Task Scheduler:
 - Specify path to *ShowDesktopOneMonitor.exe*
 - Trigger: *Run only when user is logged on*
-- *Run with highest privileges* is **not** needed anymore
+- *Run with highest privileges* is only needed if you want to move the windows of elevated
+  apps; it is not needed for the normal features (see *Running as administrator*)
 - On the *Settings* tab make sure the task will not be stopped after running longer than some days, for example.
 Note: program has icon in tray, but unfortunatelly it is invisible, if app is started from Task Scheduler :(
 
@@ -72,8 +73,18 @@ nothing is swallowed at all: the click passes through and only a log line is wri
 Limitations:
 - Apps that draw their own title bar (Chrome, VS Code, ...) only respond in the top strip
   that matches the system caption height, not across their whole visual title bar.
-- A window owned by an elevated process cannot be moved from a normal-privilege process;
-  the log then records `SetWindowPos failed`.
+- A window owned by an elevated process is invisible to a normal-privilege process: Windows
+  does not even hand it the input destined for a higher-integrity window, so that title bar
+  never triggers. Run this app elevated and those windows move too (see below).
+
+### Running as administrator
+
+Only needed for the elevated-window case above. Either right-click the exe and pick
+*Run as administrator*, or tick *Run with highest privileges* on the Task Scheduler task -
+a scheduled task starts elevated at logon **without** a UAC prompt.
+
+Nothing else in the program needs elevation, and an elevated process can touch more of the
+system, so leave it off if you do not need it.
 
 ## Troubleshooting
 
