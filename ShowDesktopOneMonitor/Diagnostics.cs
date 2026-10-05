@@ -12,11 +12,39 @@ namespace ShowDesktopOneMonitor
     {
         private static readonly object Gate = new object();
 
-        public static readonly string LogDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ShowDesktopOneMonitor");
+        // Preferred location: right next to the executable, so the file is easy to find.
+        // Falls back to %LOCALAPPDATA% when that directory is not writable (for example
+        // when the app was extracted under Program Files).
+        public static readonly string LogPath = ResolveLogPath();
 
-        public static readonly string LogPath = Path.Combine(LogDirectory, "log.txt");
+        public static readonly string LogDirectory = Path.GetDirectoryName(LogPath);
+
+        private static string ResolveLogPath ()
+        {
+            string exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            if (!string.IsNullOrEmpty(exeDirectory)) {
+                string candidate = Path.Combine(exeDirectory, "log.txt");
+                if (CanWrite(candidate)) {
+                    return candidate;
+                }
+            }
+
+            return Path.Combine(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ShowDesktopOneMonitor"), "log.txt");
+        }
+
+        private static bool CanWrite (string path)
+        {
+            try {
+                using (FileStream probe = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) {
+                }
+                return true;
+            }
+            catch (Exception) {
+                return false;
+            }
+        }
 
         public static void Write (string message)
         {

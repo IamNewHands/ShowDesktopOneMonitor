@@ -96,14 +96,18 @@ namespace ShowDesktopOneMonitor
         }
 
         private static bool IsWinDown { get { return IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN); } }
-        private static bool IsShiftDown { get { return IsKeyDown(VK_LSHIFT) || IsKeyDown(VK_RSHIFT); } }
-        private static bool IsCtrlDown { get { return IsKeyDown(VK_LCONTROL) || IsKeyDown(VK_RCONTROL); } }
-        private static bool IsAltDown { get { return IsKeyDown(VK_LMENU) || IsKeyDown(VK_RMENU); } }
+        // The generic modifier codes (VK_SHIFT/VK_CONTROL/VK_MENU) are checked as well
+        // as the left/right specific ones: the hook reports the specific codes, but
+        // GetAsyncKeyState is not guaranteed to report them for every input source.
+        private static bool IsShiftDown { get { return IsKeyDown(VK_SHIFT) || IsKeyDown(VK_LSHIFT) || IsKeyDown(VK_RSHIFT); } }
+        private static bool IsCtrlDown { get { return IsKeyDown(VK_CONTROL) || IsKeyDown(VK_LCONTROL) || IsKeyDown(VK_RCONTROL); } }
+        private static bool IsAltDown { get { return IsKeyDown(VK_MENU) || IsKeyDown(VK_LMENU) || IsKeyDown(VK_RMENU); } }
 
         /// <summary>Modifier keys themselves always pass through and never act as the hot key.</summary>
         private static bool IsModifierKey (uint vk)
         {
             switch (vk) {
+                case VK_SHIFT: case VK_CONTROL: case VK_MENU:
                 case VK_LWIN: case VK_RWIN:
                 case VK_LSHIFT: case VK_RSHIFT:
                 case VK_LCONTROL: case VK_RCONTROL:
@@ -230,6 +234,9 @@ namespace ShowDesktopOneMonitor
         private const uint LLKHF_INJECTED = 0x00000010;
         private const uint KEYEVENTF_KEYUP = 0x0002;
         private const uint INPUT_KEYBOARD = 1;
+        private const uint VK_SHIFT = 0x10;
+        private const uint VK_CONTROL = 0x11;
+        private const uint VK_MENU = 0x12;
         private const uint VK_LWIN = 0x5B;
         private const uint VK_RWIN = 0x5C;
         private const uint VK_LSHIFT = 0xA0;

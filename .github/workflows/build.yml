@@ -4,8 +4,6 @@ on:
   push:
     branches: [ master ]
   workflow_dispatch:
-  release:
-    types: [ published ]
 
 permissions:
   contents: write
@@ -26,33 +24,51 @@ jobs:
       - name: Build (Release, net48)
         run: dotnet build ShowDesktopOneMonitor/ShowDesktopOneMonitor.csproj -c Release
 
-      - name: Package
+      - name: Check build output
+        shell: pwsh
+        run: |
+          $exe = "ShowDesktopOneMonitor/bin/Release/net48/ShowDesktopOneMonitor.exe"
+          if (-not (Test-Path $exe)) { throw "build output missing: $exe" }
+          Get-Item $exe | Format-List Name, Length, LastWriteTime
+
+      - name: Package full zip for the Actions artifact
         shell: pwsh
         run: |
           $out = "ShowDesktopOneMonitor/bin/Release/net48"
-          $exe = Join-Path $out "ShowDesktopOneMonitor.exe"
-          if (-not (Test-Path $exe)) { throw "build output missing: $exe" }
-
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item $exe dist/
+          Copy-Item "$out/ShowDesktopOneMonitor.exe" dist/
           if (Test-Path "$out/ShowDesktopOneMonitor.exe.config") {
             Copy-Item "$out/ShowDesktopOneMonitor.exe.config" dist/
           }
           Copy-Item README.md dist/
-
           Compress-Archive -Path dist/* -DestinationPath ShowDesktopOneMonitor-win11.zip -Force
-
           Get-ChildItem dist | Format-Table Name, Length
 
-      - name: Upload exe artifact
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: ShowDesktopOneMonitor-win11
           path: ShowDesktopOneMonitor-win11.zip
           if-no-files-found: error
 
-      - name: Attach zip to the published release
-        if: github.event_name == 'release'
+      # A single rolling release. It is reused on every build and the asset is
+      # replaced, so there is never more than one release and it always holds
+      # only the newest exe.
+      - name: Publish the newest exe to the rolling release
         uses: softprops/action-gh-release@v2
         with:
-          files: ShowDesktopOneMonitor-win11.zip
+          tag_name: latest-build
+          name: Latest build (Windows 11)
+          body: |
+            Automatically built from `${{ github.sha }}`
+            (workflow run #${{ github.run_number }}).
+
+            Contains a single file: `ShowDesktopOneMonitor.exe`.
+            Requires .NET Framework 4.8, which is built into Windows 10 2004+ and Windows 11.
+
+            Usage: run it, then press *Win + D* (or *Win + Shift + D*) to minimize or
+            restore the windows on the monitor under the cursor.
+          files: ShowDesktopOneMonitor/bin/Release/net48/ShowDesktopOneMonitor.exe
+          make_latest: true
+          prerelease: false
+          draft: false

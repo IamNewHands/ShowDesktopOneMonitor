@@ -35,14 +35,18 @@ manifest/DPI work.
 
 ## Download
 
-Open the **Actions** tab, pick the newest successful `Build Windows 11 exe` run, and
-download the `ShowDesktopOneMonitor-win11` artifact. Every push to `master` produces one;
-publishing a release also attaches the zip to it.
+Take `ShowDesktopOneMonitor.exe` from the rolling release:
+<https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest>
+
+Every push to `master` rebuilds it and replaces that single release's asset - there is
+only ever one release, and it always holds the newest exe. The **Actions** tab keeps a full
+zip (exe + `.exe.config` + README) under the `ShowDesktopOneMonitor-win11` artifact, in case
+you also want the config file.
 
 Requires .NET Framework 4.8 (built into Windows 10 2004+ and Windows 11).
 
 ## Installation
-1. Download and extract the artifact zip somewhere convenient.
+1. Put `ShowDesktopOneMonitor.exe` in a folder you can write to (the diagnostic log lives next to it).
 2. Create a task in Task Scheduler:
 - Specify path to *ShowDesktopOneMonitor.exe*
 - Trigger: *Run only when user is logged on*
@@ -60,11 +64,12 @@ The app is tray-only: there is deliberately **no taskbar button**. On Windows 11
 tray icon starts hidden - click the `^` chevron next to the clock to find it, or turn it
 on under *Settings > Personalization > Taskbar > Other system tray icons*.
 
-The app writes a diagnostic log to `%LOCALAPPDATA%\ShowDesktopOneMonitor\log.txt`
-(also reachable from the tray menu: *Open log folder*). It records startup, the tray icon,
-the hot key registrations, the `SetWindowsHookEx` result, every hot key press and how many
-key events the hook has seen - enough to tell "the app never started", "the hook is dead"
-and "the hook is alive but the combo did not match" apart.
+The app writes a diagnostic log to `log.txt` **next to the exe** (it falls back to
+`%LOCALAPPDATA%\ShowDesktopOneMonitor\log.txt` if that folder is not writable; the tray
+menu's *Open log folder* always opens whichever one is in use). It records startup, the tray
+icon, the hot key registrations, the `SetWindowsHookEx` result, every hot key press and how
+many key events the hook has seen - enough to tell "the app never started", "the hook is
+dead" and "the hook is alive but the combo did not match" apart.
 
 ## Building locally
 
