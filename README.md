@@ -54,6 +54,18 @@ Note: program has icon in tray, but unfortunatelly it is invisible, if app is st
 Press *Win + D* to minimize/restore windows **on monitor where cursor is currently on**.
 *Win + Shift + D* keeps working as well.
 
+## Troubleshooting
+
+The app is tray-only: there is deliberately **no taskbar button**. On Windows 11 a new
+tray icon starts hidden - click the `^` chevron next to the clock to find it, or turn it
+on under *Settings > Personalization > Taskbar > Other system tray icons*.
+
+The app writes a diagnostic log to `%LOCALAPPDATA%\ShowDesktopOneMonitor\log.txt`
+(also reachable from the tray menu: *Open log folder*). It records startup, the tray icon,
+the hot key registrations, the `SetWindowsHookEx` result, every hot key press and how many
+key events the hook has seen - enough to tell "the app never started", "the hook is dead"
+and "the hook is alive but the combo did not match" apart.
+
 ## Building locally
 
 ```

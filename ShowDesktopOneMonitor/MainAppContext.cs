@@ -22,30 +22,54 @@ namespace ShowDesktopOneMonitor
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             AppDomain.CurrentDomain.UnhandledException += this.CurrentDomain_UnhandledException;
 
+            Icon trayIconImage = LoadTrayIcon();
+            Diagnostics.Write("tray icon image loaded: " + trayIconImage.Width + "x" + trayIconImage.Height);
+
             trayIcon = new NotifyIcon() {
-                Icon = LoadTrayIcon(),
+                Icon = trayIconImage,
                 ContextMenu = new ContextMenu(new MenuItem[] {
+                    new MenuItem("Open log folder", (s, e) => OpenLogFolder()),
+                    new MenuItem("-"),
                     new MenuItem("Exit", (s, e) => {trayIcon.Visible = false; Application.Exit(); }),
                 }),
                 Visible = true,
                 Text = "Show Desktop Enhanced",
             };
+            Diagnostics.Write("tray icon created, Visible=" + trayIcon.Visible);
             PrevStateByScreen = new List<DesktopWindowID>[Screen.AllScreens.Length];
 
             Keys hotKey = SettingsManager.ReadHotkey();
             KeyModifiers keyModifiers = SettingsManager.ReadKeyModifiers();
+            Diagnostics.Write("configured hot key: key=" + hotKey + " modifiers=" + keyModifiers
+                + "  screens=" + Screen.AllScreens.Length);
 
-            HotKeyManager.RegisterHotKey(hotKey, keyModifiers);
+            int primaryHotKeyId = HotKeyManager.RegisterHotKey(hotKey, keyModifiers);
+            Diagnostics.Write("registered hot key id=" + primaryHotKeyId);
 
             // Take over Win+D natively (overriding the shell's show-desktop) so the
             // same action fires without an extra remapping layer. Two keyboard hooks
             // swallowing and injecting keys around each other desync the Win key
             // state and cause the stuck-Win-key "ghost press".
             if (!(hotKey == Keys.D && keyModifiers == KeyModifiers.Windows)) {
-                HotKeyManager.RegisterHotKey(Keys.D, KeyModifiers.Windows);
+                int winDId = HotKeyManager.RegisterHotKey(Keys.D, KeyModifiers.Windows);
+                Diagnostics.Write("registered Win+D id=" + winDId);
+            }
+            else {
+                Diagnostics.Write("Win+D already covered by the configured hot key");
             }
 
             HotKeyManager.HotKeyPressed += new EventHandler<HotKeyEventArgs>(OnHotkeyPressed);
+            Diagnostics.Write("startup complete, waiting for the hot key");
+        }
+
+        private static void OpenLogFolder ()
+        {
+            try {
+                System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + Diagnostics.LogPath + "\"");
+            }
+            catch (Exception ex) {
+                Diagnostics.Write("OpenLogFolder failed", ex);
+            }
         }
 
         // The tray icon is taken from the executable's own icon (set through
@@ -66,6 +90,7 @@ namespace ShowDesktopOneMonitor
 
         private void OnHotkeyPressed(object sender, HotKeyEventArgs e)
         {
+            Diagnostics.Write("hot key fired: key=" + e.Key + " modifiers=" + e.Modifiers);
             OnShowDesktopKeyComb();
         }
 
@@ -76,6 +101,11 @@ namespace ShowDesktopOneMonitor
             // 1. Get current screen
             Screen currentScreen = Screen.FromPoint(Cursor.Position);
             int screenIdx = Array.IndexOf(Screen.AllScreens, currentScreen);
+
+            Diagnostics.Write("toggle: screens=" + Screen.AllScreens.Length
+                + " cursor=" + Cursor.Position.X + "," + Cursor.Position.Y
+                + " screen=" + currentScreen.DeviceName
+                + " screenIdx=" + screenIdx);
 
             // 2. Get windows on selected screen
             List<WindowHandle> windows = GetWindowsOnScreen(currentScreen);
@@ -110,6 +140,7 @@ namespace ShowDesktopOneMonitor
             }
 
             PrevStateByScreen[screenIdx] = windowList;
+            Diagnostics.Write("minimized: " + windowList.Count + " window(s) on screen " + screenIdx);
             //Console.WriteLine($"Minimizing {count} windows!");
         }
         private void restoreAllWindows (int screenIdx)
@@ -126,6 +157,7 @@ namespace ShowDesktopOneMonitor
             }
 
             PrevStateByScreen[screenIdx] = null;
+            Diagnostics.Write("restored windows on screen " + screenIdx);
             //Console.WriteLine($"Restoring {count} windows!");
         }
 
@@ -157,6 +189,7 @@ namespace ShowDesktopOneMonitor
 
         protected override void ExitThreadCore ()
         {
+            Diagnostics.Write("exit requested");
             trayIcon.Visible = false;
             trayIcon.Dispose();
 
@@ -173,10 +206,12 @@ namespace ShowDesktopOneMonitor
 
         private void Application_ThreadException (object sender, ThreadExceptionEventArgs e)
         {
+            Diagnostics.Write("Application.ThreadException", e.Exception);
             MessageBox.Show("Необработанное исключение: " + e.Exception.ToString(), "Show Desktop Enhanced", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         private void CurrentDomain_UnhandledException (object sender, UnhandledExceptionEventArgs e)
         {
+            Diagnostics.Write("AppDomain.UnhandledException", e.ExceptionObject as Exception);
             MessageBox.Show($"Необработанное исключение: {e.ExceptionObject as Exception}", "Show Desktop Enhanced", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }

@@ -58,7 +58,11 @@ namespace ShowDesktopOneMonitor
 
         private static void RegisterHotKeyInternal (int id, Keys key, KeyModifiers modifiers)
         {
-            _combos[id] = new HotKeyCombo { Key = key, Modifiers = modifiers & ~KeyModifiers.NoRepeat };
+            HotKeyCombo combo = new HotKeyCombo { Key = key, Modifiers = modifiers & ~KeyModifiers.NoRepeat };
+            _combos[id] = combo;
+            Diagnostics.Write("HotKeyManager: combo registered id=" + id
+                + " key=" + combo.Key + " modifiers=" + combo.Modifiers
+                + " (combos now " + _combos.Count + ")");
         }
 
         private static void UnRegisterHotKeyInternal (int id)
@@ -124,6 +128,9 @@ namespace ShowDesktopOneMonitor
 
         private static IntPtr HookProc (int nCode, IntPtr wParam, IntPtr lParam)
         {
+            // Counter only - never do I/O inside the hook callback.
+            Interlocked.Increment(ref _hookEventCount);
+
             if (nCode >= 0) {
                 KBDLLHOOKSTRUCT kbd = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
 
@@ -308,6 +315,11 @@ namespace ShowDesktopOneMonitor
         private static readonly LowLevelKeyboardProc _hookProcDelegate = HookProc;
         private static IntPtr _hHook = IntPtr.Zero;
 
+        // Diagnostics: proves the hook is alive and actually receiving key events.
+        private static int _hookEventCount;
+        private static int _reportedHookEventCount;
+        private static System.Threading.Timer _diagnosticsTimer;
+
         private static volatile MessageWindow _wnd;
         private static volatile IntPtr _hwnd;
         private static ManualResetEvent _windowReadyEvent = new ManualResetEvent(false);
@@ -321,6 +333,16 @@ namespace ShowDesktopOneMonitor
             messageLoop.Name = "MessageLoopThread";
             messageLoop.IsBackground = true;
             messageLoop.Start();
+
+            // Reports hook liveness without doing any I/O inside the hook callback.
+            _diagnosticsTimer = new System.Threading.Timer(delegate (object state)
+            {
+                int current = _hookEventCount;
+                if (current != _reportedHookEventCount) {
+                    _reportedHookEventCount = current;
+                    Diagnostics.Write("HotKeyManager: hook has received " + current + " key event(s)");
+                }
+            }, null, 30000, 30000);
         }
 
         private class MessageWindow : Form
@@ -344,8 +366,10 @@ namespace ShowDesktopOneMonitor
                 base.OnHandleCreated(e);
                 // Install the global low-level keyboard hook on the message loop thread.
                 _hHook = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProcDelegate, GetModuleHandle(null), 0);
+                int lastError = Marshal.GetLastWin32Error();
+                Diagnostics.Write("HotKeyManager: SetWindowsHookEx -> " + _hHook + " (Win32 error " + lastError + ")");
                 if (_hHook == IntPtr.Zero) {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(),
+                    throw new Win32Exception(lastError,
                         "SetWindowsHookEx failed, the hot key is unavailable");
                 }
             }
@@ -353,6 +377,7 @@ namespace ShowDesktopOneMonitor
             protected override void OnHandleDestroyed (EventArgs e)
             {
                 if (_hHook != IntPtr.Zero) {
+                    Diagnostics.Write("HotKeyManager: unhooking, hook received " + _hookEventCount + " key event(s) total");
                     UnhookWindowsHookEx(_hHook);
                     _hHook = IntPtr.Zero;
                 }

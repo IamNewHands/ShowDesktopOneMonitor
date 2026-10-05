@@ -1,4 +1,4 @@
-﻿using FrigoTab;
+using FrigoTab;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,10 +15,23 @@ namespace ShowDesktopOneMonitor
         [STAThread]
         static void Main ()
         {
+            Diagnostics.Write("=== start  exe=" + Application.ExecutablePath
+                + "  os=" + Environment.OSVersion.VersionString
+                + "  clr=" + Environment.Version
+                + "  x64process=" + Environment.Is64BitProcess
+                + "  log=" + Diagnostics.LogPath);
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            
-            Application.Run(new MainAppContext());
+
+            try {
+                Application.Run(new MainAppContext());
+                Diagnostics.Write("=== message loop returned normally");
+            }
+            catch (Exception ex) {
+                Diagnostics.Write("FATAL: Application.Run threw", ex);
+                throw;
+            }
         }
     }
 }
