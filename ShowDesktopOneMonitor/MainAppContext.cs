@@ -59,6 +59,11 @@ namespace ShowDesktopOneMonitor
             }
 
             HotKeyManager.HotKeyPressed += new EventHandler<HotKeyEventArgs>(OnHotkeyPressed);
+
+            // Optional extra: middle-clicking a title bar moves that window to the next
+            // monitor. Its own hook, isolated from the hot key hook.
+            TitleBarMover.Enable();
+
             Diagnostics.Write("startup complete, waiting for the hot key");
         }
 

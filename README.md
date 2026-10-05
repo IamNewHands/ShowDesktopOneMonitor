@@ -58,6 +58,23 @@ Note: program has icon in tray, but unfortunatelly it is invisible, if app is st
 Press *Win + D* to minimize/restore windows **on monitor where cursor is currently on**.
 *Win + Shift + D* keeps working as well.
 
+## Move a window to the next monitor
+
+Middle-click a window's **title bar** and that window moves to the next monitor
+(`Screen.AllScreens` order, wrapping around after the last one). Size and relative position
+are kept, and a maximized window stays maximized on the new monitor - the same idea as
+`Win + Shift + Arrow`.
+
+Only the caption area reacts, so middle-click keeps its normal meaning everywhere else
+(opening a link in a new tab, closing a tab, autoscroll, paste). With a single monitor
+nothing is swallowed at all: the click passes through and only a log line is written.
+
+Limitations:
+- Apps that draw their own title bar (Chrome, VS Code, ...) only respond in the top strip
+  that matches the system caption height, not across their whole visual title bar.
+- A window owned by an elevated process cannot be moved from a normal-privilege process;
+  the log then records `SetWindowPos failed`.
+
 ## Troubleshooting
 
 The app is tray-only: there is deliberately **no taskbar button**. On Windows 11 a new
