@@ -1,0 +1,58 @@
+name: Build Windows 11 exe
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+  release:
+    types: [ published ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build (Release, net48)
+        run: dotnet build ShowDesktopOneMonitor/ShowDesktopOneMonitor.csproj -c Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "ShowDesktopOneMonitor/bin/Release/net48"
+          $exe = Join-Path $out "ShowDesktopOneMonitor.exe"
+          if (-not (Test-Path $exe)) { throw "build output missing: $exe" }
+
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $exe dist/
+          if (Test-Path "$out/ShowDesktopOneMonitor.exe.config") {
+            Copy-Item "$out/ShowDesktopOneMonitor.exe.config" dist/
+          }
+          Copy-Item README.md dist/
+
+          Compress-Archive -Path dist/* -DestinationPath ShowDesktopOneMonitor-win11.zip -Force
+
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShowDesktopOneMonitor-win11
+          path: ShowDesktopOneMonitor-win11.zip
+          if-no-files-found: error
+
+      - name: Attach zip to the published release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ShowDesktopOneMonitor-win11.zip

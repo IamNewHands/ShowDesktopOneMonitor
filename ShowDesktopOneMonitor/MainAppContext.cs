@@ -1,7 +1,8 @@
-﻿using FrigoTab;
+using FrigoTab;
 using ShowDesktopOneMonitor.Properties;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -22,7 +23,7 @@ namespace ShowDesktopOneMonitor
             AppDomain.CurrentDomain.UnhandledException += this.CurrentDomain_UnhandledException;
 
             trayIcon = new NotifyIcon() {
-                Icon = Resources.sde,
+                Icon = LoadTrayIcon(),
                 ContextMenu = new ContextMenu(new MenuItem[] {
                     new MenuItem("Exit", (s, e) => {trayIcon.Visible = false; Application.Exit(); }),
                 }),
@@ -35,7 +36,32 @@ namespace ShowDesktopOneMonitor
             KeyModifiers keyModifiers = SettingsManager.ReadKeyModifiers();
 
             HotKeyManager.RegisterHotKey(hotKey, keyModifiers);
+
+            // Take over Win+D natively (overriding the shell's show-desktop) so the
+            // same action fires without an extra remapping layer. Two keyboard hooks
+            // swallowing and injecting keys around each other desync the Win key
+            // state and cause the stuck-Win-key "ghost press".
+            if (!(hotKey == Keys.D && keyModifiers == KeyModifiers.Windows)) {
+                HotKeyManager.RegisterHotKey(Keys.D, KeyModifiers.Windows);
+            }
+
             HotKeyManager.HotKeyPressed += new EventHandler<HotKeyEventArgs>(OnHotkeyPressed);
+        }
+
+        // The tray icon is taken from the executable's own icon (set through
+        // ApplicationIcon) instead of Resources.resx. The old binary-serialized
+        // resx cannot be processed by the SDK resource task without a VS task host.
+        private static Icon LoadTrayIcon ()
+        {
+            try {
+                Icon icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (icon != null) {
+                    return icon;
+                }
+            }
+            catch (Exception) {
+            }
+            return SystemIcons.Application;
         }
 
         private void OnHotkeyPressed(object sender, HotKeyEventArgs e)
@@ -129,9 +155,20 @@ namespace ShowDesktopOneMonitor
             return false == newList.All(x => PrevStateByScreen[screenIdx].First(y => y == x).WindowStyle.Equals(x.WindowStyle));
         }
 
-        ~MainAppContext () //Destructor
+        protected override void ExitThreadCore ()
         {
-            SettingsManager.Save();
+            trayIcon.Visible = false;
+            trayIcon.Dispose();
+
+            // Saving from a finalizer could throw on the finalizer thread and kill
+            // the process; do it here instead, and never let it break the shutdown.
+            try {
+                SettingsManager.Save();
+            }
+            catch (Exception) {
+            }
+
+            base.ExitThreadCore();
         }
 
         private void Application_ThreadException (object sender, ThreadExceptionEventArgs e)
