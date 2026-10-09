@@ -21,6 +21,7 @@ namespace ShowDesktopOneMonitor
             // The log can be switched off from the tray menu; honour that before the
             // first line is written.
             Diagnostics.Enabled = SettingsManager.ReadLoggingEnabled();
+            MinimizeAnimation.SuppressUnsteerableAnimation = SettingsManager.ReadSuppressUnsteerableAnimation();
 
             Application.ThreadException += this.Application_ThreadException;
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -34,11 +35,19 @@ namespace ShowDesktopOneMonitor
             MenuItem loggingItem = new MenuItem("Write log file", (s, e) => ToggleLogging((MenuItem)s));
             loggingItem.Checked = Diagnostics.Enabled;
 
+            // Off by default: skipping the animation of a window Windows will not aim broke
+            // the secondary screen on the machine this was tried on, so it stays a switch
+            // until that is understood.
+            MenuItem animationItem = new MenuItem("No animation without a taskbar button",
+                (s, e) => ToggleUnsteerableAnimation((MenuItem)s));
+            animationItem.Checked = MinimizeAnimation.SuppressUnsteerableAnimation;
+
             trayIcon = new NotifyIcon() {
                 Icon = trayIconImage,
                 ContextMenu = new ContextMenu(new MenuItem[] {
                     new MenuItem("Open log folder", (s, e) => OpenLogFolder()),
                     loggingItem,
+                    animationItem,
                     new MenuItem("-"),
                     new MenuItem("Exit", (s, e) => {trayIcon.Visible = false; Application.Exit(); }),
                 }),
@@ -92,6 +101,18 @@ namespace ShowDesktopOneMonitor
             SettingsManager.WriteLoggingEnabled(enabled);
             SettingsManager.Save();
             Diagnostics.Write("diagnostic log " + (enabled ? "enabled" : "disabled") + " from the tray menu");
+        }
+
+        // Tray menu switch for skipping the animation of windows Windows will not aim.
+        private static void ToggleUnsteerableAnimation (MenuItem item)
+        {
+            bool enabled = !item.Checked;
+            item.Checked = enabled;
+            MinimizeAnimation.SuppressUnsteerableAnimation = enabled;
+            SettingsManager.WriteSuppressUnsteerableAnimation(enabled);
+            SettingsManager.Save();
+            Diagnostics.Write("no-animation for button-less windows " + (enabled ? "enabled" : "disabled")
+                + " from the tray menu");
         }
 
         private static void OpenLogFolder ()
@@ -160,16 +181,23 @@ namespace ShowDesktopOneMonitor
         // Toggles one window and logs it. Windows only asks for the animation rectangle of
         // a window that has a taskbar button; for a window without one it animates to a
         // fallback spot of its own, which on a multi-monitor desktop reads as the animation
-        // sliding sideways. Such a window is toggled with no animation at all instead - no
-        // animation beats one that visibly slides off to the wrong place.
+        // sliding sideways. Skipping the animation of such a window is available from the
+        // tray menu, but off by default - see MinimizeAnimation.SuppressUnsteerableAnimation.
         private static void ToggleWindow (DesktopWindowID window, bool minimize)
         {
             bool steerable = !MinimizeAnimation.HasNoTaskbarButton(window.WindowHandle);
-            Diagnostics.Write((minimize ? "minimizing: " : "restoring: ")
-                + MinimizeAnimation.DescribeWindow(window.WindowHandle)
-                + (steerable ? "" : "  [no taskbar button: Windows never asks, animation skipped]"));
+            bool skipAnimation = !steerable && MinimizeAnimation.SuppressUnsteerableAnimation;
 
+            string note = "";
             if (!steerable) {
+                note = skipAnimation
+                    ? "  [no taskbar button: Windows never asks, animation skipped]"
+                    : "  [no taskbar button: Windows never asks]";
+            }
+            Diagnostics.Write((minimize ? "minimizing: " : "restoring: ")
+                + MinimizeAnimation.DescribeWindow(window.WindowHandle) + note);
+
+            if (skipAnimation) {
                 MinimizeAnimation.SetAnimationSuppressed(window.WindowHandle, true);
             }
 
@@ -180,7 +208,7 @@ namespace ShowDesktopOneMonitor
                 window.SourceHandleObj.SetRestoreWindow();
             }
 
-            if (!steerable) {
+            if (skipAnimation) {
                 MinimizeAnimation.SetAnimationSuppressed(window.WindowHandle, false);
             }
         }

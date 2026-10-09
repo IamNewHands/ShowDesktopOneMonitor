@@ -62,5 +62,17 @@ namespace ShowDesktopOneMonitor.Properties {
                 this["LoggingEnabled"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SuppressUnsteerableAnimation {
+            get {
+                return ((bool)(this["SuppressUnsteerableAnimation"]));
+            }
+            set {
+                this["SuppressUnsteerableAnimation"] = value;
+            }
+        }
     }
 }

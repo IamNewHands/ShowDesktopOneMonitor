@@ -32,6 +32,16 @@ namespace ShowDesktopOneMonitor
             SETTINGS.LoggingEnabled = enabled;
         }
 
+        public static bool ReadSuppressUnsteerableAnimation ()
+        {
+            return SETTINGS.SuppressUnsteerableAnimation;
+        }
+
+        public static void WriteSuppressUnsteerableAnimation (bool suppress)
+        {
+            SETTINGS.SuppressUnsteerableAnimation = suppress;
+        }
+
         public static void Save () => SETTINGS.Save();
 
     }

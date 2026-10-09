@@ -53,6 +53,14 @@ namespace ShowDesktopOneMonitor
         private static uint _shellHookMessage;
         private static ShellHookWindow _window;
 
+        /// <summary>
+        /// When set, a window Windows will not aim the animation of is toggled with no
+        /// animation at all. Off by default: on a dual-monitor machine where it was tried
+        /// the secondary screen stopped repainting after such a toggle, and the cause is
+        /// not understood yet, so the behaviour is opt-in.
+        /// </summary>
+        public static volatile bool SuppressUnsteerableAnimation = false;
+
         // Written by the message loop thread right before it toggles, read by the UI
         // thread while it answers the shell. Reference and int writes are atomic, so no
         // lock is needed; the deadline is written last and checked first.
