@@ -18,6 +18,10 @@ namespace ShowDesktopOneMonitor
 
         public MainAppContext ()
         {
+            // The log can be switched off from the tray menu; honour that before the
+            // first line is written.
+            Diagnostics.Enabled = SettingsManager.ReadLoggingEnabled();
+
             Application.ThreadException += this.Application_ThreadException;
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             AppDomain.CurrentDomain.UnhandledException += this.CurrentDomain_UnhandledException;
@@ -25,10 +29,16 @@ namespace ShowDesktopOneMonitor
             Icon trayIconImage = LoadTrayIcon();
             Diagnostics.Write("tray icon image loaded: " + trayIconImage.Width + "x" + trayIconImage.Height);
 
+            // Checkable tray item: the log writes a lot while debugging a monitor setup,
+            // and it can be silenced completely without restarting the app.
+            MenuItem loggingItem = new MenuItem("Write log file", (s, e) => ToggleLogging((MenuItem)s));
+            loggingItem.Checked = Diagnostics.Enabled;
+
             trayIcon = new NotifyIcon() {
                 Icon = trayIconImage,
                 ContextMenu = new ContextMenu(new MenuItem[] {
                     new MenuItem("Open log folder", (s, e) => OpenLogFolder()),
+                    loggingItem,
                     new MenuItem("-"),
                     new MenuItem("Exit", (s, e) => {trayIcon.Visible = false; Application.Exit(); }),
                 }),
@@ -70,6 +80,18 @@ namespace ShowDesktopOneMonitor
             MinimizeAnimation.Enable();
 
             Diagnostics.Write("startup complete, waiting for the hot key");
+        }
+
+        // Tray menu switch for the diagnostic log. The state goes into the settings file,
+        // so a silenced log stays silenced across restarts.
+        private static void ToggleLogging (MenuItem item)
+        {
+            bool enabled = !item.Checked;
+            item.Checked = enabled;
+            Diagnostics.Enabled = enabled;
+            SettingsManager.WriteLoggingEnabled(enabled);
+            SettingsManager.Save();
+            Diagnostics.Write("diagnostic log " + (enabled ? "enabled" : "disabled") + " from the tray menu");
         }
 
         private static void OpenLogFolder ()
@@ -145,6 +167,10 @@ namespace ShowDesktopOneMonitor
                                                             .OrderByDescending(x => x.zOrder).Select(x => x.window).ToList();
             foreach (var window in windowList) {
                 if (window.WindowStyle == WindowStyles.Visible) {
+                    // Logged per window: comparing this list with the
+                    // "MinimizeAnimation:" lines shows which windows the shell never asks
+                    // about (those keep the shell's own animation rectangle).
+                    Diagnostics.Write("minimizing: " + MinimizeAnimation.DescribeWindow(window.WindowHandle));
                     window.SourceHandleObj.SetMinimizeWindow();
 
                     //count++;
@@ -163,6 +189,7 @@ namespace ShowDesktopOneMonitor
 
                 foreach (var window in PrevStateByScreen[screenIdx].Reverse<DesktopWindowID>()) {
                     if (window.WindowStyle == WindowStyles.Visible) {
+                        Diagnostics.Write("restoring: " + MinimizeAnimation.DescribeWindow(window.WindowHandle));
                         window.SourceHandleObj.SetRestoreWindow();
 
                         //count++;

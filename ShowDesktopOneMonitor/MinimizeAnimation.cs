@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 
 namespace ShowDesktopOneMonitor
@@ -35,9 +36,11 @@ namespace ShowDesktopOneMonitor
         private const int RectOffset = 8;
 
         // How long an armed redirect stays armed. The shell asks while the ShowWindow
-        // call that starts the animation is still running, so this only has to cover
-        // the toggle loop itself.
-        private const int RedirectMilliseconds = 2000;
+        // call that starts the animation is still running, but a slow application can
+        // start its animation later than that, so this is deliberately generous: an ask
+        // that arrives after the window has expired would fall back to the shell's own
+        // rectangle and slide across the desktop again.
+        private const int RedirectMilliseconds = 5000;
 
         private static uint _shellHookMessage;
         private static ShellHookWindow _window;
@@ -123,6 +126,20 @@ namespace ShowDesktopOneMonitor
             int until = _redirectUntil;
             // Wrap-safe comparison: TickCount rolls over every ~24 days.
             return until != 0 && unchecked(until - Environment.TickCount) > 0;
+        }
+
+        /// <summary>
+        /// One line describing a window, for the toggle log: the class is what identifies
+        /// a window whose title is empty (several applications keep their frame untitled).
+        /// </summary>
+        public static string DescribeWindow (IntPtr hwnd)
+        {
+            StringBuilder className = new StringBuilder(256);
+            GetClassName(hwnd, className, className.Capacity);
+            StringBuilder title = new StringBuilder(256);
+            GetWindowText(hwnd, title, title.Capacity);
+            return "hwnd=0x" + hwnd.ToInt64().ToString("X")
+                + " class=" + className + " title=\"" + title + "\"";
         }
 
         /// <summary>
@@ -243,5 +260,11 @@ namespace ShowDesktopOneMonitor
 
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect (IntPtr hwnd, out RECT rect);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName (IntPtr hwnd, StringBuilder name, int maxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText (IntPtr hwnd, StringBuilder text, int maxCount);
     }
 }

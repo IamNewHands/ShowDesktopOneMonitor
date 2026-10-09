@@ -10,6 +10,10 @@ namespace ShowDesktopOneMonitor
     /// </summary>
     internal static class Diagnostics
     {
+        // Switched from the tray menu and restored from the settings file. While it is
+        // off nothing at all is written, so the log can be silenced without restarting.
+        public static volatile bool Enabled = true;
+
         private static readonly object Gate = new object();
 
         // The log is capped: as soon as it would grow past this size it is rewritten
@@ -57,6 +61,10 @@ namespace ShowDesktopOneMonitor
 
         public static void Write (string message, Exception exception)
         {
+            if (!Enabled) {
+                return;
+            }
+
             try {
                 lock (Gate) {
                     Directory.CreateDirectory(LogDirectory);

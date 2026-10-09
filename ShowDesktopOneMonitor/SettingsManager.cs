@@ -1,4 +1,4 @@
-﻿using ShowDesktopOneMonitor.Properties;
+using ShowDesktopOneMonitor.Properties;
 using System;
 using System.Windows.Forms;
 
@@ -20,6 +20,16 @@ namespace ShowDesktopOneMonitor
             KeyModifiers modifiers = SETTINGS.KeyModifiers[0];
             Array.ForEach(SETTINGS.KeyModifiers, m => modifiers |= m);
             return modifiers;
+        }
+
+        public static bool ReadLoggingEnabled ()
+        {
+            return SETTINGS.LoggingEnabled;
+        }
+
+        public static void WriteLoggingEnabled (bool enabled)
+        {
+            SETTINGS.LoggingEnabled = enabled;
         }
 
         public static void Save () => SETTINGS.Save();

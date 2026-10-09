@@ -110,6 +110,16 @@ dead" and "the hook is alive but the combo did not match" apart.
 The file is capped at 1 MB: once it would grow past that, its oldest half is dropped, so it
 never grows without bound.
 
+**Write log file** in the tray menu switches the log off: while it is unchecked **nothing at
+all is written** (not even errors). The state is kept in the settings file and survives a
+restart; tick it again when you need the log.
+
+For animation problems, the log lists every window it toggles (`minimizing:` / `restoring:`
+with hwnd, window class and title) and every shell question it answers (`MinimizeAnimation:`
+with the rectangle the shell wanted to use). A window that shows up in `minimizing:` but has
+no matching `MinimizeAnimation:` line is one Windows never asked about - such a window keeps
+the animation direction Windows picks for it.
+
 ## Building locally
 
 ```
