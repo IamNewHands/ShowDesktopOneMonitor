@@ -35,6 +35,14 @@ namespace ShowDesktopOneMonitor
         private const int HandleOffset = 0;
         private const int RectOffset = 8;
 
+        // Window styles and the DWM attribute used to tell whether Windows will ask us for
+        // a window's animation rectangle, and to skip the animation when it will not.
+        private const long WsExToolWindow = 0x00000080;
+        private const long WsExAppWindow = 0x00040000;
+        private const int ExStyleIndex = -20;
+        private const uint GetWindowOwner = 4;
+        private const int DwmTransitionsForcedDisabled = 3;
+
         // How long an armed redirect stays armed. The shell asks while the ShowWindow
         // call that starts the animation is still running, but a slow application can
         // start its animation later than that, so this is deliberately generous: an ask
@@ -140,6 +148,65 @@ namespace ShowDesktopOneMonitor
             GetWindowText(hwnd, title, title.Capacity);
             return "hwnd=0x" + hwnd.ToInt64().ToString("X")
                 + " class=" + className + " title=\"" + title + "\"";
+        }
+
+        /// <summary>
+        /// True when Windows gives this window no taskbar button, and therefore never asks
+        /// us where its animation should go.
+        ///
+        /// Windows puts a button on a top-level window that has no owner and is not a tool
+        /// window, or on any window marked WS_EX_APPWINDOW. Foxmail's main frame is an
+        /// example of the opposite: it is owned by a hidden helper window and carries
+        /// neither ex-style bit, so it has no button and the shell animates it to a
+        /// fallback spot of its own choosing.
+        /// </summary>
+        public static bool HasNoTaskbarButton (IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) {
+                return false;
+            }
+
+            try {
+                long exStyle = GetWindowLongPtr(hwnd, ExStyleIndex).ToInt64();
+                if ((exStyle & WsExAppWindow) != 0) {
+                    return false;
+                }
+                if ((exStyle & WsExToolWindow) != 0) {
+                    return true;
+                }
+                return GetWindow(hwnd, GetWindowOwner) != IntPtr.Zero;
+            }
+            catch (Exception ex) {
+                Diagnostics.Write("MinimizeAnimation: HasNoTaskbarButton failed", ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Switches the DWM transitions of a window off or back on. Used around the toggle
+        /// of a window whose animation target Windows will not let us steer: no animation
+        /// is better than one that visibly slides across the desktop.
+        ///
+        /// Clearing the flag again right after ShowWindow returns is enough - the animation
+        /// is decided while that call is still running.
+        /// </summary>
+        public static void SetAnimationSuppressed (IntPtr hwnd, bool suppressed)
+        {
+            if (hwnd == IntPtr.Zero) {
+                return;
+            }
+
+            try {
+                int value = suppressed ? 1 : 0;
+                int result = DwmSetWindowAttribute(hwnd, DwmTransitionsForcedDisabled, ref value, sizeof(int));
+                if (result != 0) {
+                    Diagnostics.Write("MinimizeAnimation: transitions=" + suppressed + " on hwnd=0x"
+                        + hwnd.ToInt64().ToString("X") + " refused, hr=0x" + result.ToString("X8"));
+                }
+            }
+            catch (Exception ex) {
+                Diagnostics.Write("MinimizeAnimation: SetAnimationSuppressed failed", ex);
+            }
         }
 
         /// <summary>
@@ -266,5 +333,23 @@ namespace ShowDesktopOneMonitor
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText (IntPtr hwnd, StringBuilder text, int maxCount);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow (IntPtr hwnd, uint command);
+
+        // Win32 does not support GetWindowLongPtr directly.
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+        private static extern IntPtr GetWindowLong32 (IntPtr hwnd, int index);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+        private static extern IntPtr GetWindowLong64 (IntPtr hwnd, int index);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute (IntPtr hwnd, int attribute, ref int value, int size);
+
+        private static IntPtr GetWindowLongPtr (IntPtr hwnd, int index)
+        {
+            return IntPtr.Size == 8 ? GetWindowLong64(hwnd, index) : GetWindowLong32(hwnd, index);
+        }
     }
 }

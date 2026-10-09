@@ -157,6 +157,34 @@ namespace ShowDesktopOneMonitor
                 minimizeAllWindows(newWindowIDs, screenIdx);
             }           
         }
+        // Toggles one window and logs it. Windows only asks for the animation rectangle of
+        // a window that has a taskbar button; for a window without one it animates to a
+        // fallback spot of its own, which on a multi-monitor desktop reads as the animation
+        // sliding sideways. Such a window is toggled with no animation at all instead - no
+        // animation beats one that visibly slides off to the wrong place.
+        private static void ToggleWindow (DesktopWindowID window, bool minimize)
+        {
+            bool steerable = !MinimizeAnimation.HasNoTaskbarButton(window.WindowHandle);
+            Diagnostics.Write((minimize ? "minimizing: " : "restoring: ")
+                + MinimizeAnimation.DescribeWindow(window.WindowHandle)
+                + (steerable ? "" : "  [no taskbar button: Windows never asks, animation skipped]"));
+
+            if (!steerable) {
+                MinimizeAnimation.SetAnimationSuppressed(window.WindowHandle, true);
+            }
+
+            if (minimize) {
+                window.SourceHandleObj.SetMinimizeWindow();
+            }
+            else {
+                window.SourceHandleObj.SetRestoreWindow();
+            }
+
+            if (!steerable) {
+                MinimizeAnimation.SetAnimationSuppressed(window.WindowHandle, false);
+            }
+        }
+
         private void minimizeAllWindows (List<DesktopWindowID> windowList, int screenIdx)
         {
             MinimizeAnimation.RedirectFor(Screen.AllScreens[screenIdx]);
@@ -167,11 +195,7 @@ namespace ShowDesktopOneMonitor
                                                             .OrderByDescending(x => x.zOrder).Select(x => x.window).ToList();
             foreach (var window in windowList) {
                 if (window.WindowStyle == WindowStyles.Visible) {
-                    // Logged per window: comparing this list with the
-                    // "MinimizeAnimation:" lines shows which windows the shell never asks
-                    // about (those keep the shell's own animation rectangle).
-                    Diagnostics.Write("minimizing: " + MinimizeAnimation.DescribeWindow(window.WindowHandle));
-                    window.SourceHandleObj.SetMinimizeWindow();
+                    ToggleWindow(window, minimize: true);
 
                     //count++;
                 }
@@ -189,8 +213,7 @@ namespace ShowDesktopOneMonitor
 
                 foreach (var window in PrevStateByScreen[screenIdx].Reverse<DesktopWindowID>()) {
                     if (window.WindowStyle == WindowStyles.Visible) {
-                        Diagnostics.Write("restoring: " + MinimizeAnimation.DescribeWindow(window.WindowHandle));
-                        window.SourceHandleObj.SetRestoreWindow();
+                        ToggleWindow(window, minimize: false);
 
                         //count++;
                     }

@@ -29,6 +29,7 @@
 | 2019 那个版本只在启动时按当时的显示器数量分配状态数组，显示器数量一变就抛 `IndexOutOfRangeException` | 使用现行代码，每次切换都会重新调整数组大小 |
 | `SettingsManager.Save()` 在终结器里执行，可能直接杀死进程 | 移到 `ExitThreadCore` 并加了保护 |
 | 多显示器上按热键时，最小化/恢复动画会飞向系统算出的任务栏按钮，而那个按钮可能在**另一块**显示器上，动画于是横向滑过整个桌面 | 接管 shell 钩子 `HSHELL_GETMINRECT`：切换期间把动画目标改写成本显示器底边（`MinimizeAnimation.cs`），动画始终在本屏内垂直落下 |
+| 有些窗口（Foxmail 主窗口就是：被隐藏的辅助窗口 owner、且没有 `WS_EX_APPWINDOW`）**根本没有任务栏按钮**，Windows 不会来问动画落点，而是自己挑一个 —— 多屏下表现为斜着飞。实测三条路都不通：钩子收不到询问、`ptMinPosition` 在 Win11 不生效、跨进程改窗口样式被拒绝（access denied） | 识别出这类窗口（有 owner 且无 `WS_EX_APPWINDOW`）后，切换它时用 `DWMWA_TRANSITIONS_FORCEDISABLED` 临时关掉动画：**瞬间**出现/消失，不再斜着飞 |
 
 Windows 11 的钩子改法参考了
 [Jiaqi1017/ShowDesktopOneMonitor](https://github.com/Jiaqi1017/ShowDesktopOneMonitor)
@@ -62,6 +63,10 @@ release，里面永远只有最新那个 exe。**Actions** 页签下另有一份
 窗口的展开/收起动画始终落在**光标所在显示器的底边**：窗口垂直往下收进任务栏、
 再垂直长回来。不会出现「动画横向滑到另一块显示器去」的情况（那个方向是 Windows
 自己算的任务栏按钮位置决定的，多屏时可能落在别的屏幕上）。
+
+例外：**没有任务栏按钮的窗口**（例如 Foxmail 主窗口）是瞬间出现/消失的，不播动画。
+Windows 不允许指定这类窗口的动画落点，与其让它们斜着飞，不如不动画。有任务栏按钮的
+窗口照常垂直动画。
 
 ## 把窗口移到下一个显示器
 
@@ -105,7 +110,9 @@ release，里面永远只有最新那个 exe。**Actions** 页签下另有一份
 排查动画方向时，日志里每个被切换的窗口都有一行 `minimizing:` / `restoring:`（hwnd、窗口类、
 标题），接管动画的那次 shell 询问是一行 `MinimizeAnimation:`（含 shell 原本想用的矩形）。
 某个窗口在 `minimizing:` 里出现、却没有对应的 `MinimizeAnimation:` 行，就说明系统没有为它
-询问动画位置 —— 那种窗口保留系统自己的动画方向。
+询问动画位置 —— 那种窗口保留系统自己的动画方向。行尾带
+`[no taskbar button: Windows never asks, animation skipped]` 的，就是被判定为没有任务栏按钮、
+切换时不播动画的那一类。
 
 ## 本地编译
 

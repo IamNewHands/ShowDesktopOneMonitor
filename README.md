@@ -29,6 +29,7 @@ What is fixed here:
 | The 2019 release sized its per-monitor state array once at startup and threw `IndexOutOfRangeException` whenever the monitor count changed | Uses the current code, which resizes the array on every toggle |
 | `SettingsManager.Save()` ran from a finalizer and could kill the process | Saving moved to `ExitThreadCore` and guarded |
 | On a multi-monitor setup the minimize/restore animation flies to the taskbar button the shell picks - and that button can live on **another** monitor, so the animation slides sideways across the whole desktop | The shell hook `HSHELL_GETMINRECT` is answered during our own toggle (`MinimizeAnimation.cs`), retargeting the animation at the bottom edge of the monitor the toggle runs on, so it always drops vertically inside that screen |
+| Some windows (Foxmail's main frame is one: owned by a hidden helper window and carrying no `WS_EX_APPWINDOW`) have **no taskbar button at all**, so Windows never asks where their animation should go and picks a spot of its own - which reads as the animation sliding sideways. All three levers were measured and are dead: no shell question arrives, `ptMinPosition` is ignored on Windows 11, and changing another process's window styles is refused with access denied | Such a window (owner set, no `WS_EX_APPWINDOW`) is toggled with `DWMWA_TRANSITIONS_FORCEDISABLED` set for that one call: it **pops** instead of sliding sideways |
 
 The Windows 11 hook rewrite follows the approach worked out in
 [Jiaqi1017/ShowDesktopOneMonitor](https://github.com/Jiaqi1017/ShowDesktopOneMonitor)
@@ -66,6 +67,11 @@ The minimize/restore animation always lands on the **bottom edge of the monitor 
 is on**: windows drop straight down into the taskbar and grow back up. It never slides
 sideways onto another monitor (that direction comes from the taskbar button Windows picks,
 which on a multi-monitor setup can sit on a different screen).
+
+Exception: a window with **no taskbar button** (Foxmail's main frame, for example) pops in
+and out with no animation at all. Windows does not let us aim the animation of such a
+window, and no animation beats one that visibly slides off to the wrong place. Windows with
+a taskbar button keep the vertical animation.
 
 ## Move a window to the next monitor
 
@@ -118,7 +124,9 @@ For animation problems, the log lists every window it toggles (`minimizing:` / `
 with hwnd, window class and title) and every shell question it answers (`MinimizeAnimation:`
 with the rectangle the shell wanted to use). A window that shows up in `minimizing:` but has
 no matching `MinimizeAnimation:` line is one Windows never asked about - such a window keeps
-the animation direction Windows picks for it.
+the animation direction Windows picks for it. Lines ending in
+`[no taskbar button: Windows never asks, animation skipped]` are the ones classified as
+having no taskbar button, which are toggled without an animation.
 
 ## Building locally
 
