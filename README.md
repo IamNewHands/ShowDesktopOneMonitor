@@ -28,6 +28,7 @@ What is fixed here:
 | The app was DPI-unaware, so on a mixed-DPI setup `Screen.FromPoint` / `Screen.FromHandle` can pick the wrong monitor | Per-monitor DPI aware (`PerMonitorV2`) + Windows 10/11 declared in the manifest |
 | The 2019 release sized its per-monitor state array once at startup and threw `IndexOutOfRangeException` whenever the monitor count changed | Uses the current code, which resizes the array on every toggle |
 | `SettingsManager.Save()` ran from a finalizer and could kill the process | Saving moved to `ExitThreadCore` and guarded |
+| On a multi-monitor setup the minimize/restore animation flies to the taskbar button the shell picks - and that button can live on **another** monitor, so the animation slides sideways across the whole desktop | The shell hook `HSHELL_GETMINRECT` is answered during our own toggle (`MinimizeAnimation.cs`), retargeting the animation at the bottom edge of the monitor the toggle runs on, so it always drops vertically inside that screen |
 
 The Windows 11 hook rewrite follows the approach worked out in
 [Jiaqi1017/ShowDesktopOneMonitor](https://github.com/Jiaqi1017/ShowDesktopOneMonitor)
@@ -60,6 +61,11 @@ Note: program has icon in tray, but unfortunatelly it is invisible, if app is st
 ## Usage
 Press *Win + D* to minimize/restore windows **on monitor where cursor is currently on**.
 *Win + Shift + D* keeps working as well.
+
+The minimize/restore animation always lands on the **bottom edge of the monitor the cursor
+is on**: windows drop straight down into the taskbar and grow back up. It never slides
+sideways onto another monitor (that direction comes from the taskbar button Windows picks,
+which on a multi-monitor setup can sit on a different screen).
 
 ## Move a window to the next monitor
 

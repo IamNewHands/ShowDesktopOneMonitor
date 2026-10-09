@@ -28,6 +28,7 @@
 | 进程不感知 DPI，混合 DPI 环境下 `Screen.FromPoint` / `Screen.FromHandle` 会选错显示器 | 启用每显示器 DPI 感知（`PerMonitorV2`），并在清单里声明支持 Windows 10/11 |
 | 2019 那个版本只在启动时按当时的显示器数量分配状态数组，显示器数量一变就抛 `IndexOutOfRangeException` | 使用现行代码，每次切换都会重新调整数组大小 |
 | `SettingsManager.Save()` 在终结器里执行，可能直接杀死进程 | 移到 `ExitThreadCore` 并加了保护 |
+| 多显示器上按热键时，最小化/恢复动画会飞向系统算出的任务栏按钮，而那个按钮可能在**另一块**显示器上，动画于是横向滑过整个桌面 | 接管 shell 钩子 `HSHELL_GETMINRECT`：切换期间把动画目标改写成本显示器底边（`MinimizeAnimation.cs`），动画始终在本屏内垂直落下 |
 
 Windows 11 的钩子改法参考了
 [Jiaqi1017/ShowDesktopOneMonitor](https://github.com/Jiaqi1017/ShowDesktopOneMonitor)
@@ -57,6 +58,10 @@ release，里面永远只有最新那个 exe。**Actions** 页签下另有一份
 ## 用法
 按 *Win + D* 最小化/恢复**光标当前所在显示器**上的窗口。
 *Win + Shift + D* 同样可用。
+
+窗口的展开/收起动画始终落在**光标所在显示器的底边**：窗口垂直往下收进任务栏、
+再垂直长回来。不会出现「动画横向滑到另一块显示器去」的情况（那个方向是 Windows
+自己算的任务栏按钮位置决定的，多屏时可能落在别的屏幕上）。
 
 ## 把窗口移到下一个显示器
 

@@ -64,6 +64,11 @@ namespace ShowDesktopOneMonitor
             // monitor. Its own hook, isolated from the hot key hook.
             TitleBarMover.Enable();
 
+            // Keeps the minimize/restore animation on the monitor the toggle runs on.
+            // Installed here, on the UI thread, because the shell asks for the
+            // animation rectangle while the message loop thread is inside ShowWindow.
+            MinimizeAnimation.Enable();
+
             Diagnostics.Write("startup complete, waiting for the hot key");
         }
 
@@ -132,6 +137,8 @@ namespace ShowDesktopOneMonitor
         }
         private void minimizeAllWindows (List<DesktopWindowID> windowList, int screenIdx)
         {
+            MinimizeAnimation.RedirectFor(Screen.AllScreens[screenIdx]);
+
             //int count = 0;
             // sort by ZOrder to restore windows in reverse order
             windowList = windowList.Select(x => new { window = x, zOrder = WindowApi.GetWindowZOrder(x.WindowHandle) })
@@ -152,6 +159,8 @@ namespace ShowDesktopOneMonitor
         {
             //int count = 0;
             if (PrevStateByScreen[screenIdx] != null) {
+                MinimizeAnimation.RedirectFor(Screen.AllScreens[screenIdx]);
+
                 foreach (var window in PrevStateByScreen[screenIdx].Reverse<DesktopWindowID>()) {
                     if (window.WindowStyle == WindowStyles.Visible) {
                         window.SourceHandleObj.SetRestoreWindow();
@@ -197,6 +206,7 @@ namespace ShowDesktopOneMonitor
             Diagnostics.Write("exit requested");
             trayIcon.Visible = false;
             trayIcon.Dispose();
+            MinimizeAnimation.Disable();
 
             // Saving from a finalizer could throw on the finalizer thread and kill
             // the process; do it here instead, and never let it break the shutdown.
