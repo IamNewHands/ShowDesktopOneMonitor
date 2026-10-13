@@ -110,6 +110,16 @@ once, after the move, instead of twice). An application that insists on its own 
 normal window - no fake full screen with black borders, and maximizing it by hand works, because
 the application does the layout itself.
 
+The moved window is also brought to the front and given the keyboard focus, exactly as the click
+that started the move would have activated it: the click is swallowed and the move keeps the
+Z-order, so a window that was not the active one used to arrive behind whatever is already open on
+the target monitor. Taking the focus is what keeps it in front - Windows holds the foreground
+window at the top of the stack, so a window that is only raised sinks back behind it. While
+another process owns the foreground, `SetForegroundWindow` is refused silently, so one synthetic
+ALT press is sent to release that lock for the next call (measured on this machine: raising alone
+changes nothing, and `AttachThreadInput` does not help either). A window that is already the active
+one is left untouched. The `settled` line reports `foreground=True` when the window ended up active.
+
 Only the caption area reacts, so middle-click keeps its normal meaning everywhere else
 (opening a link in a new tab, closing a tab, autoscroll, paste). With a single monitor
 nothing is swallowed at all: the click passes through and only a log line is written.

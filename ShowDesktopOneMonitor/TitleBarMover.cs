@@ -40,8 +40,17 @@ namespace ShowDesktopOneMonitor
         private const int GA_ROOT = 2;
         private const int SW_RESTORE = 9;
         private const int SW_MAXIMIZE = 3;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
+
+        // Insert after this handle to raise a window to the top of the normal window band.
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
+
+        // A single synthetic ALT press, used to release the foreground lock - see PutInFront.
+        private const byte VK_MENU = 0x12;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
 
         // How long after a maximized move the outcome is read back. The immediate read is
         // useless: Windows animates the maximize and reports the rectangle it currently
@@ -352,6 +361,13 @@ namespace ShowDesktopOneMonitor
                 ShowWindow(hwnd, SW_MAXIMIZE);
             }
 
+            // The click that asked for the move was swallowed, so nothing has activated this
+            // window: without this it lands behind whatever is already open on the target
+            // monitor (log.txt 2026-10-13 13:17).
+            if (!PutInFront(hwnd)) {
+                note += "  [raised to the top, but the keyboard focus stayed with the window that had it]";
+            }
+
             // Nothing is read back here for a maximized window: while the maximize animation
             // runs, Windows reports the rectangle it is currently drawing, and acting on that
             // reading - as an earlier version did - is what shrinks such windows. The outcome
@@ -426,6 +442,52 @@ namespace ShowDesktopOneMonitor
             if (processId != 0) {
                 _deferredMaximizeProcesses.Add(processId);
             }
+        }
+
+        /// <summary>
+        /// Puts a moved window in front and gives it the keyboard focus. The middle click is
+        /// swallowed on purpose, so the window never receives the click whose default handling
+        /// would have activated it, and the move itself keeps the Z-order (SWP_NOZORDER) - a
+        /// window that was not the active one therefore arrives behind whatever is already open
+        /// on the target monitor (log.txt 2026-10-13 13:17). Windows' own move to the next
+        /// monitor, Win+Shift+Arrow, activates the window it moves, and this is the same idea.
+        ///
+        /// Taking the focus is also what keeps the window in front: Windows holds the foreground
+        /// window at the top of the stack, so a window that is only raised sinks back behind it.
+        /// Measured on this machine (2026-10-13 13:35, caller is another process than the window):
+        /// SetWindowPos(HWND_TOP) reports success and changes nothing, SetForegroundWindow is
+        /// refused, and AttachThreadInput to the foreground thread does not help either. What does
+        /// work is one synthetic ALT press, which releases the foreground lock for the next call -
+        /// the window then ends up both in front and focused.
+        ///
+        /// Returns whether the window holds the keyboard focus afterwards.
+        /// </summary>
+        private static bool PutInFront (IntPtr hwnd)
+        {
+            if (!IsWindow(hwnd)) {
+                return false;
+            }
+
+            // Helps when nothing owns the foreground; while something else does, Windows refuses
+            // to put this window above it and the call quietly does nothing.
+            SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+            if (GetForegroundWindow() == hwnd) {
+                return true;
+            }
+
+            SetForegroundWindow(hwnd);
+            if (GetForegroundWindow() == hwnd) {
+                return true;
+            }
+
+            // The second attempt, with the foreground lock released. A lone ALT press has no other
+            // effect: the applications that watch it only react to it as part of a combination.
+            keybd_event(VK_MENU, 0, 0, IntPtr.Zero);
+            keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, IntPtr.Zero);
+            SetForegroundWindow(hwnd);
+
+            return GetForegroundWindow() == hwnd;
         }
 
         /// <summary>
@@ -676,9 +738,18 @@ namespace ShowDesktopOneMonitor
                     }
                 }
 
+                // Converting the size or maximizing here can push the window down the stack again,
+                // so the window the move put in front is raised once more. Only while it still is
+                // the active one: by now the user may have gone to another window on purpose, and
+                // taking the focus then would be rude.
+                if (GetForegroundWindow() == hwnd) {
+                    PutInFront(hwnd);
+                }
+
                 Diagnostics.Write("TitleBarMover: settled " + Describe(hwnd)
                     + " on screen " + index + " (wanted " + planned.TargetIndex + ")"
-                    + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd) + note);
+                    + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd)
+                    + " foreground=" + (GetForegroundWindow() == hwnd) + note);
             }
 
             /// <summary>
@@ -776,6 +847,15 @@ namespace ShowDesktopOneMonitor
 
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos (IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow (IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow ();
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event (byte virtualKey, byte scanCode, uint flags, IntPtr extraInfo);
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindow (IntPtr hwnd, int command);
