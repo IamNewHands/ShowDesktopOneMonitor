@@ -576,6 +576,10 @@ namespace ShowDesktopOneMonitor
             /// the window keeps its old physical pixels. Those are the ones where the size the
             /// user sees has to be restored from here. A window that came back with a different
             /// size was adjusted by its application or clamps its own size, and is left alone.
+            ///
+            /// A window that is maximized and still does not cover the monitor it was moved to
+            /// gets that monitor's work area, which is the one thing the user cannot repair by
+            /// hand because the window already counts as maximized.
             /// </summary>
             private void ReportSettled ()
             {
@@ -608,7 +612,17 @@ namespace ShowDesktopOneMonitor
                         note += "  [did not end up on the target monitor]";
                     }
                     else if (IsZoomed(hwnd) && !CoversWorkArea(hwnd, targetArea)) {
-                        note += "  [maximized but not covering the target work area]";
+                        // Maximized and yet smaller than the monitor it was moved to: the user
+                        // cannot fix that by maximizing again, because it already is maximized
+                        // (UU远程's session window ends up like this, log.txt 2026-10-13 10:50).
+                        // Handing it the target work area now is safe - the animation is over -
+                        // and an application that keeps its own frame shows up in this line
+                        // instead of leaving the window unusable.
+                        SetWindowPos(hwnd, IntPtr.Zero, targetArea.Left, targetArea.Top,
+                            targetArea.Width, targetArea.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+                        note += CoversWorkArea(hwnd, targetArea)
+                            ? "  [maximized but not covering the target work area, filled it here]"
+                            : "  [maximized but not covering the target work area, and the application keeps its own frame]";
                     }
                 }
 
