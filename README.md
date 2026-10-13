@@ -101,8 +101,14 @@ such a value can belong to the other monitor's scale factor, and scaling it agai
 window with every move. An application that manages its own size (NetEase's UU远程, for example)
 only gets moved, never resized. Every move logs one line (`dpi A -> B`, `size` before and after the
 conversion, `at x,y`, `target=`) and, 900 ms later, a `settled` line with the monitor the window
-ended up on, `result=`, `zoomed=`, and a note when it did not reach the target monitor or does not
-cover that monitor's work area while maximized.
+ended up on, `result=` and `zoomed=`.
+
+That settling pass also finishes the job: a size that nobody adjusted is converted there
+(`converted it here`), and a window that claims to be maximized without covering its monitor is
+asked for the maximized state again (that application is then remembered and later moves maximize
+once, after the move, instead of twice). An application that insists on its own frame keeps a
+normal window - no fake full screen with black borders, and maximizing it by hand works, because
+the application does the layout itself.
 
 Only the caption area reacts, so middle-click keeps its normal meaning everywhere else
 (opening a link in a new tab, closing a tab, autoscroll, paste). With a single monitor

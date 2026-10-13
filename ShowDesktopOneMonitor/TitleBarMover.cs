@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -66,6 +67,11 @@ namespace ShowDesktopOneMonitor
         private static volatile MessageWindow _messageWindow;
         private static volatile IntPtr _hwnd;
         private static readonly ManualResetEvent _windowReadyEvent = new ManualResetEvent(false);
+
+        // Processes whose maximized windows do not take the maximized state while they are being
+        // moved, and are therefore maximized later instead. Only touched from the message loop
+        // thread, which runs one move at a time.
+        private static readonly HashSet<uint> _deferredMaximizeProcesses = new HashSet<uint>();
 
         private static IntPtr _hook = IntPtr.Zero;
         private static bool _swallowButtonUp;
@@ -338,7 +344,11 @@ namespace ShowDesktopOneMonitor
 
             string note = moved ? "" : "  [SetWindowPos failed - an elevated window cannot be moved from here]";
 
-            if (wasMaximized) {
+            // An application that does not take the maximized state while it is being moved (see
+            // the settle check) is maximized later instead, so its window does not visibly
+            // maximize twice.
+            bool deferMaximize = wasMaximized && NeedsDeferredMaximize(hwnd);
+            if (wasMaximized && !deferMaximize) {
                 ShowWindow(hwnd, SW_MAXIMIZE);
             }
 
@@ -347,6 +357,7 @@ namespace ShowDesktopOneMonitor
             // reading - as an earlier version did - is what shrinks such windows. The outcome
             // is read once the window has settled, by the settle check in MessageWindow.
             planned.Maximized = wasMaximized;
+            planned.DeferredMaximize = deferMaximize;
             planned.AskedWidth = width;
             planned.AskedHeight = height;
             planned.WantedWidth = wantedWidth;
@@ -354,6 +365,7 @@ namespace ShowDesktopOneMonitor
 
             Diagnostics.Write("TitleBarMover: " + Describe(hwnd)
                 + (wasMaximized ? " (was maximized, kept maximized)" : "")
+                + (deferMaximize ? " maximize-deferred" : "")
                 + " screen " + Array.IndexOf(screens, source) + " -> " + targetIndex
                 + " dpi " + sourceDpi + " -> " + targetDpi
                 + " size " + sourceWidth + "x" + sourceHeight + " -> " + width + "x" + height
@@ -381,6 +393,7 @@ namespace ShowDesktopOneMonitor
             public IntPtr Window;
             public int TargetIndex;
             public bool Maximized;
+            public bool DeferredMaximize;
             public int AskedWidth;
             public int AskedHeight;
             public int WantedWidth;
@@ -388,6 +401,30 @@ namespace ShowDesktopOneMonitor
 
             public bool NeedsSizeConversion {
                 get { return WantedWidth != AskedWidth || WantedHeight != AskedHeight; }
+            }
+        }
+
+        /// <summary>
+        /// True for a window whose application does not take the maximized state when it arrives
+        /// together with the move. NetEase's UU远程 session window ends up with a small frame
+        /// that way and only lays its content out over the whole screen when it is maximized
+        /// again after the move and the scale change have settled (log.txt 2026-10-13 10:59).
+        /// Such a process is remembered, so its later moves maximize once - at that moment -
+        /// instead of twice.
+        /// </summary>
+        private static bool NeedsDeferredMaximize (IntPtr hwnd)
+        {
+            uint processId;
+            GetWindowThreadProcessId(hwnd, out processId);
+            return processId != 0 && _deferredMaximizeProcesses.Contains(processId);
+        }
+
+        private static void RememberDeferredMaximize (IntPtr hwnd)
+        {
+            uint processId;
+            GetWindowThreadProcessId(hwnd, out processId);
+            if (processId != 0) {
+                _deferredMaximizeProcesses.Add(processId);
             }
         }
 
@@ -570,16 +607,9 @@ namespace ShowDesktopOneMonitor
             /// over: which monitor it ended up on, its rectangle and whether it fills that
             /// monitor's work area.
             ///
-            /// It also converts the size for the applications that do not do it themselves: a
-            /// window whose size is still exactly the one that was asked for was not touched by
-            /// anybody, so Windows' proposed rectangle for the new scale factor was ignored and
-            /// the window keeps its old physical pixels. Those are the ones where the size the
-            /// user sees has to be restored from here. A window that came back with a different
-            /// size was adjusted by its application or clamps its own size, and is left alone.
-            ///
-            /// A window that is maximized and still does not cover the monitor it was moved to is
-            /// asked for the maximized state again; an application that insists on its own frame
-            /// keeps a normal window instead of a fake full screen one.
+            /// It also finishes what the move could not: the size for the applications that do
+            /// not convert it themselves, and the maximized state for the applications that do
+            /// not take it while they are being moved.
             /// </summary>
             private void ReportSettled ()
             {
@@ -593,52 +623,78 @@ namespace ShowDesktopOneMonitor
                 IntPtr hwnd = planned.Window;
                 string note = "";
 
-                if (!planned.Maximized && planned.NeedsSizeConversion) {
+                Screen[] screens = Screen.AllScreens;
+                int index = Array.IndexOf(screens, Screen.FromHandle(hwnd));
+                bool onTarget = planned.TargetIndex >= 0 && planned.TargetIndex < screens.Length
+                    && index == planned.TargetIndex;
+                Rectangle targetArea = onTarget ? screens[planned.TargetIndex].WorkingArea : Rectangle.Empty;
+                if (!onTarget) {
+                    note += "  [did not end up on the target monitor]";
+                }
+
+                // An application that does not convert the size itself: the window still has
+                // exactly the size that was asked for, so Windows' proposed rectangle for the new
+                // scale factor was ignored and the window kept its old physical pixels. A window
+                // that came back with a different size was adjusted by its application or clamps
+                // its own size, and is left alone. Only a window that is not maximized right now
+                // is resized here - that is what keeps this from fighting a maximized one.
+                if (!IsZoomed(hwnd) && planned.NeedsSizeConversion) {
                     RECT current;
                     if (GetWindowRect(hwnd, out current)
                         && Math.Abs((current.Right - current.Left) - planned.AskedWidth) <= SizeTolerance
                         && Math.Abs((current.Bottom - current.Top) - planned.AskedHeight) <= SizeTolerance) {
                         SetWindowPos(hwnd, IntPtr.Zero, current.Left, current.Top,
                             planned.WantedWidth, planned.WantedHeight, SWP_NOZORDER | SWP_NOACTIVATE);
-                        note = "  [nothing adjusted the size for the new scale factor, converted it here]";
+                        note += "  [nothing adjusted the size for the new scale factor, converted it here]";
                     }
                 }
 
-                Screen[] screens = Screen.AllScreens;
-                int index = Array.IndexOf(screens, Screen.FromHandle(hwnd));
-                if (planned.TargetIndex >= 0 && planned.TargetIndex < screens.Length) {
-                    Rectangle targetArea = screens[planned.TargetIndex].WorkingArea;
-                    if (index != planned.TargetIndex) {
-                        note += "  [did not end up on the target monitor]";
+                if (planned.Maximized && planned.DeferredMaximize) {
+                    // The maximize was left to this moment on purpose: this application does not
+                    // take it while it is being moved.
+                    note += MaximizeAndCheck(hwnd, targetArea, onTarget)
+                        ? "  [maximized once the move had settled]"
+                        : "  [the application keeps its own frame, left restored instead of maximized]";
+                }
+                else if (planned.Maximized && onTarget && IsZoomed(hwnd) && !CoversWorkArea(hwnd, targetArea)) {
+                    // Maximized and yet smaller than the monitor it was moved to. Forcing the frame
+                    // to the work area is not the answer: the application keeps drawing its own
+                    // smaller area and everything around it stays black (UU远程's session window,
+                    // log.txt 2026-10-13 10:59). What does work is asking for the maximized state
+                    // again once the move and the scale change have settled - the double click the
+                    // user would do by hand, after which the application lays its content out over
+                    // the whole screen. The process is remembered so later moves maximize once, at
+                    // this moment, instead of twice.
+                    ShowWindow(hwnd, SW_RESTORE);
+                    if (MaximizeAndCheck(hwnd, targetArea, true)) {
+                        RememberDeferredMaximize(hwnd);
+                        note += "  [asked for the maximized state again after the move, it fills the screen now;"
+                            + " this application is maximized after the move from now on]";
                     }
-                    else if (IsZoomed(hwnd) && !CoversWorkArea(hwnd, targetArea)) {
-                        // Maximized and yet smaller than the monitor it was moved to. Forcing the
-                        // frame to the work area is not the answer: the application keeps drawing
-                        // its own smaller area and everything around it stays black (UU远程's
-                        // session window, log.txt 2026-10-13 10:59). What does work is asking for
-                        // the maximized state again once the move and the scale change have
-                        // settled - that is what the user does by hand with a double click, and
-                        // the application then lays its content out over the whole screen.
-                        ShowWindow(hwnd, SW_RESTORE);
-                        ShowWindow(hwnd, SW_MAXIMIZE);
-
-                        if (CoversWorkArea(hwnd, targetArea)) {
-                            note += "  [asked for the maximized state again after the move, it fills the screen now]";
-                        }
-                        else {
-                            // The application insists on its own frame. A window that looks full
-                            // screen but is not is worse than an honest one, so it is left
-                            // restored: a normal window on the new monitor, which the user can
-                            // maximize - and that works, because the application does it itself.
-                            ShowWindow(hwnd, SW_RESTORE);
-                            note += "  [the application keeps its own frame, left restored instead of maximized]";
-                        }
+                    else {
+                        note += "  [the application keeps its own frame, left restored instead of maximized]";
                     }
                 }
 
                 Diagnostics.Write("TitleBarMover: settled " + Describe(hwnd)
                     + " on screen " + index + " (wanted " + planned.TargetIndex + ")"
                     + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd) + note);
+            }
+
+            /// <summary>
+            /// Asks for the maximized state and reports whether the window now fills the target
+            /// work area. A window that does not is left restored: one that looks full screen
+            /// without being it is worse than an honest normal window, and the user can maximize
+            /// it by hand - which works, because the application then does the layout itself.
+            /// </summary>
+            private static bool MaximizeAndCheck (IntPtr hwnd, Rectangle targetArea, bool check)
+            {
+                ShowWindow(hwnd, SW_MAXIMIZE);
+                bool fills = !check || CoversWorkArea(hwnd, targetArea);
+                if (!fills) {
+                    ShowWindow(hwnd, SW_RESTORE);
+                }
+                return fills;
             }
 
             protected override void SetVisibleCore (bool value)
