@@ -82,6 +82,14 @@ Middle-click a window's **title bar** and that window moves to the next monitor
 are kept, and a maximized window stays maximized on the new monitor - the same idea as
 `Win + Shift + Arrow`.
 
+On a desktop whose monitors use **different scale factors** (150% and 200%, for example) the
+size is converted between the two monitors' DPIs, so the window keeps the size the *user*
+sees: carried over at its physical size it would come out a third smaller on the monitor with
+the higher scale factor. A window that does not fit the target monitor is shrunk to that
+monitor's work area instead of hanging off its edge, and a maximized window is checked against
+the work area after the move and filled out if it kept the maximized rectangle of the monitor
+it came from.
+
 Only the caption area reacts, so middle-click keeps its normal meaning everywhere else
 (opening a link in a new tab, closing a tab, autoscroll, paste). With a single monitor
 nothing is swallowed at all: the click passes through and only a log line is written.

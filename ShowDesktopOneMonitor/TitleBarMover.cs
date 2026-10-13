@@ -42,6 +42,17 @@ namespace ShowDesktopOneMonitor
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
 
+        // The move converts a window's size between the scale factors of two monitors, so
+        // it needs the DPI of a monitor, not the DPI a window reports.
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+        private const int MDT_EFFECTIVE_DPI = 0;
+        private const uint DefaultDpi = 96;
+
+        // How far a maximized window may miss its monitor's work area before its frame is
+        // treated as the wrong one. A maximized window is exactly the work area, or a few
+        // pixels larger when the application draws its own border - never smaller.
+        private const int MaximizedTolerance = 2;
+
         private delegate IntPtr LowLevelMouseProc (int nCode, IntPtr wParam, IntPtr lParam);
 
         private static readonly LowLevelMouseProc _hookProcDelegate = HookProc;
@@ -242,7 +253,18 @@ namespace ShowDesktopOneMonitor
 
             bool wasMaximized = IsZoomed(hwnd);
             Screen source = Screen.FromHandle(hwnd);
-            Rectangle targetArea = screens[targetIndex].WorkingArea;
+            Screen target = screens[targetIndex];
+            Rectangle sourceArea = source.WorkingArea;
+            Rectangle targetArea = target.WorkingArea;
+
+            // The monitors of a mixed-scale desktop do not share a pixel grid: the same
+            // window has to be given a different number of physical pixels on each of them
+            // to keep the size the user sees. Carried over at its old physical size the
+            // window changes its apparent size by the ratio of the two scale factors - by
+            // 4/3 between a 150% and a 200% monitor - which is what makes it come out tiny
+            // on the monitor with the higher scale factor and oversized on the other one.
+            uint sourceDpi = DpiOfScreen(source);
+            uint targetDpi = DpiOfScreen(target);
 
             // A maximized window ignores SetWindowPos, so restore first and maximize
             // again afterwards - this keeps it maximized on the new monitor.
@@ -254,14 +276,19 @@ namespace ShowDesktopOneMonitor
             if (!GetWindowRect(hwnd, out rect)) {
                 return;
             }
-            int width = rect.Right - rect.Left;
-            int height = rect.Bottom - rect.Top;
-            if (width <= 0 || height <= 0) {
+            int sourceWidth = rect.Right - rect.Left;
+            int sourceHeight = rect.Bottom - rect.Top;
+            if (sourceWidth <= 0 || sourceHeight <= 0) {
                 return;
             }
 
+            // Keep the apparent size, and never hand over a window larger than the monitor
+            // it is going to: clamping the position alone would leave its right or bottom
+            // edge off that screen, where it stays cut off.
+            int width = Math.Min(ScaleToDpi(sourceWidth, sourceDpi, targetDpi), targetArea.Width);
+            int height = Math.Min(ScaleToDpi(sourceHeight, sourceDpi, targetDpi), targetArea.Height);
+
             // Keep the relative position inside the source work area, like Win+Shift+Arrow does.
-            Rectangle sourceArea = source.WorkingArea;
             double relativeX = sourceArea.Width > 0 ? (rect.Left - sourceArea.Left) / (double)sourceArea.Width : 0.0;
             double relativeY = sourceArea.Height > 0 ? (rect.Top - sourceArea.Top) / (double)sourceArea.Height : 0.0;
 
@@ -272,15 +299,109 @@ namespace ShowDesktopOneMonitor
 
             bool moved = SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
 
+            string note = moved ? "" : "  [SetWindowPos failed - an elevated window cannot be moved from here]";
+
             if (wasMaximized) {
                 ShowWindow(hwnd, SW_MAXIMIZE);
+
+                // A window that has just changed monitor can still hold the maximized
+                // rectangle of the monitor it came from. That leaves it smaller than the
+                // screen it now sits on, cut off at the edges, and already maximized, so
+                // neither the user nor a second maximize can make it fill that screen.
+                // Handing it the target work area is what repairs the frame; an
+                // application that insists on its own size says so in this log line.
+                if (!CoversWorkArea(hwnd, targetArea)) {
+                    SetWindowPos(hwnd, IntPtr.Zero, targetArea.Left, targetArea.Top, targetArea.Width, targetArea.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+                    note += CoversWorkArea(hwnd, targetArea)
+                        ? "  [kept the other monitor's maximized rectangle, filled the target work area instead]"
+                        : "  [still not filling the target monitor - the application keeps its own size]";
+                }
             }
 
             Diagnostics.Write("TitleBarMover: " + Describe(hwnd)
                 + (wasMaximized ? " (was maximized, kept maximized)" : "")
                 + " screen " + Array.IndexOf(screens, source) + " -> " + targetIndex
-                + " rect=" + x + "," + y + " " + width + "x" + height
-                + (moved ? "" : "  [SetWindowPos failed - an elevated window cannot be moved from here]"));
+                + " dpi " + sourceDpi + " -> " + targetDpi
+                + " size " + sourceWidth + "x" + sourceHeight + " -> " + width + "x" + height
+                + " at " + x + "," + y
+                + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd) + note);
+        }
+
+        /// <summary>
+        /// Physical pixels that keep a size looking the same when a window crosses monitors
+        /// with different scale factors, so a 1000x700 window stays 1000x700 to the user
+        /// instead of turning into 750x525 or 1333x933.
+        /// </summary>
+        private static int ScaleToDpi (int pixels, uint fromDpi, uint toDpi)
+        {
+            if (fromDpi == 0 || toDpi == 0 || fromDpi == toDpi) {
+                return pixels;
+            }
+            return (int)Math.Round(pixels * (double)toDpi / fromDpi);
+        }
+
+        /// <summary>
+        /// Scale factor of a monitor in DPI. The monitor is what the user sees, so this is
+        /// the value the conversion has to use - and it is the same value for an
+        /// application that scales itself per monitor and for one that lets Windows scale
+        /// it.
+        /// </summary>
+        private static uint DpiOfScreen (Screen screen)
+        {
+            try {
+                Rectangle bounds = screen.Bounds;
+                POINT center = new POINT();
+                center.x = bounds.Left + bounds.Width / 2;
+                center.y = bounds.Top + bounds.Height / 2;
+
+                IntPtr monitor = MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST);
+                if (monitor == IntPtr.Zero) {
+                    return DefaultDpi;
+                }
+
+                uint dpiX;
+                uint dpiY;
+                if (GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, out dpiX, out dpiY) != 0 || dpiX == 0) {
+                    return DefaultDpi;
+                }
+                return dpiX;
+            }
+            catch (EntryPointNotFoundException) {
+                // Older than Windows 8.1: one scale factor for the whole desktop, so there
+                // is nothing to convert between the monitors.
+                return DefaultDpi;
+            }
+            catch (DllNotFoundException) {
+                return DefaultDpi;
+            }
+        }
+
+        /// <summary>
+        /// True when the window's frame covers its monitor's work area. Used to tell a
+        /// maximized window that really fills its screen from one that was resized to the
+        /// wrong monitor's work area.
+        /// </summary>
+        private static bool CoversWorkArea (IntPtr hwnd, Rectangle workArea)
+        {
+            RECT rect;
+            if (!GetWindowRect(hwnd, out rect)) {
+                return true; // Nothing to repair when the window cannot be measured.
+            }
+
+            return rect.Left <= workArea.Left + MaximizedTolerance
+                && rect.Top <= workArea.Top + MaximizedTolerance
+                && rect.Right >= workArea.Right - MaximizedTolerance
+                && rect.Bottom >= workArea.Bottom - MaximizedTolerance;
+        }
+
+        private static string DescribeRect (IntPtr hwnd)
+        {
+            RECT rect;
+            if (!GetWindowRect(hwnd, out rect)) {
+                return "unknown";
+            }
+            return rect.Left + "," + rect.Top + " "
+                + (rect.Right - rect.Left) + "x" + (rect.Bottom - rect.Top);
         }
 
         private static string Describe (IntPtr hwnd)
@@ -452,6 +573,12 @@ namespace ShowDesktopOneMonitor
 
         [DllImport("user32.dll")]
         private static extern int GetDpiForWindow (IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint (POINT point, uint flags);
+
+        [DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor (IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName (IntPtr hwnd, StringBuilder name, int maxCount);
