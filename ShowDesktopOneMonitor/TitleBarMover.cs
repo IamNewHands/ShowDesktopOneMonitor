@@ -47,6 +47,11 @@ namespace ShowDesktopOneMonitor
         // draws, which is how "265x56" got into the log while the window ended up fine.
         private const int SettleMilliseconds = 900;
 
+        // How far a window's size may differ from the one that was asked for and still count
+        // as "nobody adjusted it". Sizes come back exactly, positions do not - applications
+        // inset their own frame - so this only compares width and height.
+        private const int SizeTolerance = 2;
+
         // The move converts a window's size between the scale factors of two monitors, so
         // it needs the DPI of a monitor, not the DPI a window reports.
         private const uint MONITOR_DEFAULTTONEAREST = 2;
@@ -241,15 +246,19 @@ namespace ShowDesktopOneMonitor
 
         // ---- move ----
 
-        private static bool MoveToScreen (IntPtr hwnd, int targetIndex)
+        private static PlannedMove MoveToScreen (IntPtr hwnd, int targetIndex)
         {
             Screen[] screens = Screen.AllScreens;
             if (targetIndex < 0 || targetIndex >= screens.Length) {
-                return false;
+                return null;
             }
             if (!IsWindow(hwnd)) {
-                return false;
+                return null;
             }
+
+            PlannedMove planned = new PlannedMove();
+            planned.Window = hwnd;
+            planned.TargetIndex = targetIndex;
 
             bool wasMaximized = IsZoomed(hwnd);
             Screen source = Screen.FromHandle(hwnd);
@@ -257,12 +266,22 @@ namespace ShowDesktopOneMonitor
             Rectangle sourceArea = source.WorkingArea;
             Rectangle targetArea = target.WorkingArea;
 
-            // The monitors of a mixed-scale desktop do not share a pixel grid: the same
-            // window has to be given a different number of physical pixels on each of them
-            // to keep the size the user sees. Carried over at its old physical size the
-            // window changes its apparent size by the ratio of the two scale factors - by
-            // 4/3 between a 150% and a 200% monitor - which is what makes it come out tiny
-            // on the monitor with the higher scale factor and oversized on the other one.
+            // The monitors of a mixed-scale desktop do not share a pixel grid, and the two
+            // scale factors are handled in two very different ways depending on the
+            // application - so both are measured instead of assumed:
+            //
+            // A per-monitor-DPI-aware application is sent WM_DPICHANGED by Windows with a
+            // rectangle that keeps the size the user sees, and it applies that rectangle
+            // (Explorer, Chrome, QQ, 微信 all behave this way). Converting the size here as
+            // well applies the factor twice: a 2560 px wide window came back 3413 px wide
+            // (= x 4/3) and stuck out of the 3200 px monitor onto the next one
+            // (log.txt 2026-10-13 10:37).
+            //
+            // An application that keeps its own size - NetEase's UU远程 pins its windows to
+            // their own aspect ratio - ignores that rectangle and keeps its physical pixels
+            // (log.txt 2026-10-13 09:25: 1632x1080 on both monitors). For those the size has
+            // to be converted here, and the settle check does that once it has seen that
+            // nothing else adjusted the window.
             uint sourceDpi = DpiOfScreen(source);
             uint targetDpi = DpiOfScreen(target);
 
@@ -284,20 +303,27 @@ namespace ShowDesktopOneMonitor
             RECT rect;
             if (!GetWindowRect(hwnd, out rect)) {
                 Diagnostics.Write("TitleBarMover: " + Describe(hwnd) + " has no readable rectangle, not moved");
-                return false;
+                return null;
             }
 
             int sourceWidth = rect.Right - rect.Left;
             int sourceHeight = rect.Bottom - rect.Top;
             if (sourceWidth <= 0 || sourceHeight <= 0) {
-                return false;
+                return null;
             }
 
-            // Keep the apparent size, and never hand over a window larger than the monitor
-            // it is going to: clamping the position alone would leave its right or bottom
-            // edge off that screen, where it stays cut off.
-            int width = Math.Min(ScaleToDpi(sourceWidth, sourceDpi, targetDpi), targetArea.Width);
-            int height = Math.Min(ScaleToDpi(sourceHeight, sourceDpi, targetDpi), targetArea.Height);
+            // The size that is carried over is the measured one, untouched. Only a move
+            // between monitors with the same scale factor gets the fit clamp, because only
+            // there is the size not going to be adjusted by anybody else.
+            bool sameScale = sourceDpi == targetDpi;
+            int width = sameScale ? Math.Min(sourceWidth, targetArea.Width) : sourceWidth;
+            int height = sameScale ? Math.Min(sourceHeight, targetArea.Height) : sourceHeight;
+
+            // The size that keeps what the user sees, used when nothing else adjusts the
+            // window - see the settle check. Never larger than the monitor it is going to:
+            // a position clamp alone would leave the far edge off that screen.
+            int wantedWidth = Math.Min(ScaleToDpi(sourceWidth, sourceDpi, targetDpi), targetArea.Width);
+            int wantedHeight = Math.Min(ScaleToDpi(sourceHeight, sourceDpi, targetDpi), targetArea.Height);
 
             // Keep the relative position inside the source work area, like Win+Shift+Arrow does.
             double relativeX = sourceArea.Width > 0 ? (rect.Left - sourceArea.Left) / (double)sourceArea.Width : 0.0;
@@ -320,19 +346,49 @@ namespace ShowDesktopOneMonitor
             // runs, Windows reports the rectangle it is currently drawing, and acting on that
             // reading - as an earlier version did - is what shrinks such windows. The outcome
             // is read once the window has settled, by the settle check in MessageWindow.
+            planned.Maximized = wasMaximized;
+            planned.AskedWidth = width;
+            planned.AskedHeight = height;
+            planned.WantedWidth = wantedWidth;
+            planned.WantedHeight = wantedHeight;
+
             Diagnostics.Write("TitleBarMover: " + Describe(hwnd)
                 + (wasMaximized ? " (was maximized, kept maximized)" : "")
                 + " screen " + Array.IndexOf(screens, source) + " -> " + targetIndex
                 + " dpi " + sourceDpi + " -> " + targetDpi
                 + " size " + sourceWidth + "x" + sourceHeight + " -> " + width + "x" + height
+                + (width == wantedWidth && height == wantedHeight
+                    ? ""
+                    : " converted=" + wantedWidth + "x" + wantedHeight)
                 + " at " + x + "," + y
                 + " target=" + targetArea.Left + "," + targetArea.Top + " " + targetArea.Width + "x" + targetArea.Height
-                + (wasMaximized
+                + (wasMaximized || width != wantedWidth || height != wantedHeight
                     ? " (outcome follows in the settled line)"
                     : " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd))
                 + note);
 
-            return wasMaximized;
+            return planned;
+        }
+
+        /// <summary>
+        /// What one move asked for, kept until the settle check reads back what really
+        /// happened. "Asked" is the rectangle handed to the window, "wanted" the rectangle
+        /// that keeps the size the user sees; the two differ exactly when the move crosses
+        /// two monitors with different scale factors.
+        /// </summary>
+        private class PlannedMove
+        {
+            public IntPtr Window;
+            public int TargetIndex;
+            public bool Maximized;
+            public int AskedWidth;
+            public int AskedHeight;
+            public int WantedWidth;
+            public int WantedHeight;
+
+            public bool NeedsSizeConversion {
+                get { return WantedWidth != AskedWidth || WantedHeight != AskedHeight; }
+            }
         }
 
         /// <summary>
@@ -438,8 +494,7 @@ namespace ShowDesktopOneMonitor
             // because Windows animates the maximize and hands out the rectangle it is drawing
             // at that moment. Runs on this window's thread, which pumps messages.
             private readonly System.Windows.Forms.Timer _settleTimer = new System.Windows.Forms.Timer();
-            private IntPtr _settledHwnd = IntPtr.Zero;
-            private int _settledTarget = -1;
+            private PlannedMove _settled;
 
             public MessageWindow ()
             {
@@ -498,9 +553,9 @@ namespace ShowDesktopOneMonitor
                             + " but there is only one screen - nothing to do, the click passed through");
                         return;
                     }
-                    if (MoveToScreen(hwnd, targetIndex)) {
-                        _settledHwnd = hwnd;
-                        _settledTarget = targetIndex;
+                    PlannedMove planned = MoveToScreen(hwnd, targetIndex);
+                    if (planned != null) {
+                        _settled = planned;
                         _settleTimer.Stop();
                         _settleTimer.Start();
                     }
@@ -514,30 +569,51 @@ namespace ShowDesktopOneMonitor
             /// One line about what the moved window really looks like once the animation is
             /// over: which monitor it ended up on, its rectangle and whether it fills that
             /// monitor's work area.
+            ///
+            /// It also converts the size for the applications that do not do it themselves: a
+            /// window whose size is still exactly the one that was asked for was not touched by
+            /// anybody, so Windows' proposed rectangle for the new scale factor was ignored and
+            /// the window keeps its old physical pixels. Those are the ones where the size the
+            /// user sees has to be restored from here. A window that came back with a different
+            /// size was adjusted by its application or clamps its own size, and is left alone.
             /// </summary>
             private void ReportSettled ()
             {
-                IntPtr hwnd = _settledHwnd;
-                if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) {
+                PlannedMove planned = _settled;
+                _settled = null;
+                if (planned == null || !IsWindow(planned.Window)) {
                     Diagnostics.Write("TitleBarMover: settled check skipped, the window is gone");
                     return;
                 }
 
+                IntPtr hwnd = planned.Window;
+                string note = "";
+
+                if (!planned.Maximized && planned.NeedsSizeConversion) {
+                    RECT current;
+                    if (GetWindowRect(hwnd, out current)
+                        && Math.Abs((current.Right - current.Left) - planned.AskedWidth) <= SizeTolerance
+                        && Math.Abs((current.Bottom - current.Top) - planned.AskedHeight) <= SizeTolerance) {
+                        SetWindowPos(hwnd, IntPtr.Zero, current.Left, current.Top,
+                            planned.WantedWidth, planned.WantedHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+                        note = "  [nothing adjusted the size for the new scale factor, converted it here]";
+                    }
+                }
+
                 Screen[] screens = Screen.AllScreens;
                 int index = Array.IndexOf(screens, Screen.FromHandle(hwnd));
-                string note = "";
-                if (_settledTarget >= 0 && _settledTarget < screens.Length) {
-                    Rectangle targetArea = screens[_settledTarget].WorkingArea;
-                    if (index != _settledTarget) {
-                        note = "  [did not end up on the target monitor]";
+                if (planned.TargetIndex >= 0 && planned.TargetIndex < screens.Length) {
+                    Rectangle targetArea = screens[planned.TargetIndex].WorkingArea;
+                    if (index != planned.TargetIndex) {
+                        note += "  [did not end up on the target monitor]";
                     }
                     else if (IsZoomed(hwnd) && !CoversWorkArea(hwnd, targetArea)) {
-                        note = "  [maximized but not covering the target work area]";
+                        note += "  [maximized but not covering the target work area]";
                     }
                 }
 
                 Diagnostics.Write("TitleBarMover: settled " + Describe(hwnd)
-                    + " on screen " + index + " (wanted " + _settledTarget + ")"
+                    + " on screen " + index + " (wanted " + planned.TargetIndex + ")"
                     + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd) + note);
             }
 

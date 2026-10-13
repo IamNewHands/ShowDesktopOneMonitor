@@ -83,10 +83,15 @@ are kept, and a maximized window stays maximized on the new monitor - the same i
 `Win + Shift + Arrow`.
 
 On a desktop whose monitors use **different scale factors** (150% and 200%, for example) the
-size is converted between the two monitors' DPIs, so the window keeps the size the *user*
-sees: carried over at its physical size it would come out a third smaller on the monitor with
-the higher scale factor. A window that does not fit the target monitor is shrunk to that
-monitor's work area instead of hanging off its edge.
+size is **not** converted up front: Windows sends a per-monitor-DPI-aware application a
+`WM_DPICHANGED` whose proposed rectangle already keeps the size the user sees, and almost every
+application (Explorer, Chrome, QQ, 微信) applies it - converting the size here as well applies the
+factor twice (measured: a requested 2560 px wide window came back 3413 px = x4/3, wider than the
+3200 px monitor it was put on). The outcome is read 900 ms later: a window whose size is still
+exactly the requested one was adjusted by nobody (NetEase's UU远程 manages its own size), so the
+converted size is applied then; a window whose size the application changed, or that clamps its
+own size, is left alone. A move between two monitors with the **same** scale factor still shrinks
+a window that would not fit the target work area.
 
 A maximized window is moved by restoring it, placing it on the target monitor and maximizing it
 again: `SetWindowPlacement` and `SetWindowPos` both report success on a maximized window and leave
