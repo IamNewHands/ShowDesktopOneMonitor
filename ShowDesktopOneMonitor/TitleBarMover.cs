@@ -577,9 +577,9 @@ namespace ShowDesktopOneMonitor
             /// user sees has to be restored from here. A window that came back with a different
             /// size was adjusted by its application or clamps its own size, and is left alone.
             ///
-            /// A window that is maximized and still does not cover the monitor it was moved to
-            /// gets that monitor's work area, which is the one thing the user cannot repair by
-            /// hand because the window already counts as maximized.
+            /// A window that is maximized and still does not cover the monitor it was moved to is
+            /// asked for the maximized state again; an application that insists on its own frame
+            /// keeps a normal window instead of a fake full screen one.
             /// </summary>
             private void ReportSettled ()
             {
@@ -612,17 +612,27 @@ namespace ShowDesktopOneMonitor
                         note += "  [did not end up on the target monitor]";
                     }
                     else if (IsZoomed(hwnd) && !CoversWorkArea(hwnd, targetArea)) {
-                        // Maximized and yet smaller than the monitor it was moved to: the user
-                        // cannot fix that by maximizing again, because it already is maximized
-                        // (UU远程's session window ends up like this, log.txt 2026-10-13 10:50).
-                        // Handing it the target work area now is safe - the animation is over -
-                        // and an application that keeps its own frame shows up in this line
-                        // instead of leaving the window unusable.
-                        SetWindowPos(hwnd, IntPtr.Zero, targetArea.Left, targetArea.Top,
-                            targetArea.Width, targetArea.Height, SWP_NOZORDER | SWP_NOACTIVATE);
-                        note += CoversWorkArea(hwnd, targetArea)
-                            ? "  [maximized but not covering the target work area, filled it here]"
-                            : "  [maximized but not covering the target work area, and the application keeps its own frame]";
+                        // Maximized and yet smaller than the monitor it was moved to. Forcing the
+                        // frame to the work area is not the answer: the application keeps drawing
+                        // its own smaller area and everything around it stays black (UU远程's
+                        // session window, log.txt 2026-10-13 10:59). What does work is asking for
+                        // the maximized state again once the move and the scale change have
+                        // settled - that is what the user does by hand with a double click, and
+                        // the application then lays its content out over the whole screen.
+                        ShowWindow(hwnd, SW_RESTORE);
+                        ShowWindow(hwnd, SW_MAXIMIZE);
+
+                        if (CoversWorkArea(hwnd, targetArea)) {
+                            note += "  [asked for the maximized state again after the move, it fills the screen now]";
+                        }
+                        else {
+                            // The application insists on its own frame. A window that looks full
+                            // screen but is not is worse than an honest one, so it is left
+                            // restored: a normal window on the new monitor, which the user can
+                            // maximize - and that works, because the application does it itself.
+                            ShowWindow(hwnd, SW_RESTORE);
+                            note += "  [the application keeps its own frame, left restored instead of maximized]";
+                        }
                     }
                 }
 
