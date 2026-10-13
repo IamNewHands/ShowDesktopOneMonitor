@@ -86,9 +86,16 @@ On a desktop whose monitors use **different scale factors** (150% and 200%, for 
 size is converted between the two monitors' DPIs, so the window keeps the size the *user*
 sees: carried over at its physical size it would come out a third smaller on the monitor with
 the higher scale factor. A window that does not fit the target monitor is shrunk to that
-monitor's work area instead of hanging off its edge, and a maximized window is checked against
-the work area after the move and filled out if it kept the maximized rectangle of the monitor
-it came from.
+monitor's work area instead of hanging off its edge.
+
+A maximized window is not restored, positioned and maximized again: that hands the application
+a restored window in the middle of a DPI change, and an application that manages its own size
+(NetEase's UU远程 session window, for example) answers with a window of its own and shrinks with
+every move. It is moved with `SetWindowPlacement`, which changes the restored rectangle and the
+maximized state in one call, so the window never leaves the maximized state and Windows computes
+the maximized frame from the monitor it lands on; an application that pins its own size only gets
+moved, never resized. The log line prints `dpi A -> B`, `size` before and after the conversion,
+`at x,y`, `target=`, `result=` and `zoomed=`, so every move can be checked.
 
 Only the caption area reacts, so middle-click keeps its normal meaning everywhere else
 (opening a link in a new tab, closing a tab, autoscroll, paste). With a single monitor
