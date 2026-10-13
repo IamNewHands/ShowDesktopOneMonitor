@@ -37,13 +37,15 @@ namespace ShowDesktopOneMonitor
         private const int SM_CXPADDEDBORDER = 92;
 
         private const int GA_ROOT = 2;
+        private const int SW_RESTORE = 9;
+        private const int SW_MAXIMIZE = 3;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
 
-        // The show command a WINDOWPLACEMENT carries when a window is to be put into the
-        // maximized state. Same value as the SW_MAXIMIZE command of ShowWindow, but a
-        // different parameter: a placement's showCmd, not a ShowWindow command.
-        private const int SW_SHOWMAXIMIZED = 3;
+        // How long after a maximized move the outcome is read back. The immediate read is
+        // useless: Windows animates the maximize and reports the rectangle it currently
+        // draws, which is how "265x56" got into the log while the window ended up fine.
+        private const int SettleMilliseconds = 900;
 
         // The move converts a window's size between the scale factors of two monitors, so
         // it needs the DPI of a monitor, not the DPI a window reports.
@@ -239,14 +241,14 @@ namespace ShowDesktopOneMonitor
 
         // ---- move ----
 
-        private static void MoveToScreen (IntPtr hwnd, int targetIndex)
+        private static bool MoveToScreen (IntPtr hwnd, int targetIndex)
         {
             Screen[] screens = Screen.AllScreens;
             if (targetIndex < 0 || targetIndex >= screens.Length) {
-                return;
+                return false;
             }
             if (!IsWindow(hwnd)) {
-                return;
+                return false;
             }
 
             bool wasMaximized = IsZoomed(hwnd);
@@ -264,23 +266,31 @@ namespace ShowDesktopOneMonitor
             uint sourceDpi = DpiOfScreen(source);
             uint targetDpi = DpiOfScreen(target);
 
-            // The rectangle to carry over is the window's restored one: while a window is
-            // maximized its frame covers a whole screen, which says nothing about the size
-            // the user gave the window, and the restored rectangle is what a later restore
-            // uses. Reading it out of the placement avoids restoring the window to measure
-            // it, which an application can answer with a resize of its own - NetEase's
-            // UU远程 session window came back as 265x56 and shrank further with every move
-            // (log.txt, 2026-10-13 10:00).
+            // A maximized window ignores SetWindowPos, and it ignores a placement that would
+            // move it to another monitor as well: SetWindowPlacement with a restore rectangle
+            // on the target monitor returns true and leaves the window exactly where it was
+            // (measured on this machine, log.txt 2026-10-13 10:25). Restoring it, moving it
+            // and maximizing it again is the only sequence that moves it - and it is the one
+            // Windows itself uses for Win+Shift+Arrow.
+            if (wasMaximized) {
+                ShowWindow(hwnd, SW_RESTORE);
+            }
+
+            // The size to carry over is measured here, on the monitor the window really is
+            // on, in that monitor's physical pixels. A stored rectangle can belong to the
+            // other monitor's scale factor, and scaling such a value again shrinks or grows
+            // the window on every move - the 1632x1080 -> 1224x810 -> 960x608 series in
+            // log.txt 2026-10-13 10:25 - so it is never trusted.
             RECT rect;
-            if (!GetRestoredRect(hwnd, wasMaximized, out rect)) {
+            if (!GetWindowRect(hwnd, out rect)) {
                 Diagnostics.Write("TitleBarMover: " + Describe(hwnd) + " has no readable rectangle, not moved");
-                return;
+                return false;
             }
 
             int sourceWidth = rect.Right - rect.Left;
             int sourceHeight = rect.Bottom - rect.Top;
             if (sourceWidth <= 0 || sourceHeight <= 0) {
-                return;
+                return false;
             }
 
             // Keep the apparent size, and never hand over a window larger than the monitor
@@ -298,17 +308,18 @@ namespace ShowDesktopOneMonitor
             x = Math.Max(targetArea.Left, Math.Min(x, targetArea.Right - width));
             y = Math.Max(targetArea.Top, Math.Min(y, targetArea.Bottom - height));
 
-            // A maximized window is moved by asking Windows for a new placement instead of
-            // by restoring, positioning and maximizing it: that round trip hands the
-            // application a restored window on another monitor in the middle of a DPI
-            // change, and an application that insists on its own geometry answers with a
-            // window of its own, small and already maximized.
-            bool moved = wasMaximized
-                ? PlaceMaximizedWindow(hwnd, x, y, width, height)
-                : SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+            bool moved = SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
 
-            string note = moved ? "" : "  [the window refused the move - an elevated window cannot be moved from here, and an application can reject its own placement]";
+            string note = moved ? "" : "  [SetWindowPos failed - an elevated window cannot be moved from here]";
 
+            if (wasMaximized) {
+                ShowWindow(hwnd, SW_MAXIMIZE);
+            }
+
+            // Nothing is read back here for a maximized window: while the maximize animation
+            // runs, Windows reports the rectangle it is currently drawing, and acting on that
+            // reading - as an earlier version did - is what shrinks such windows. The outcome
+            // is read once the window has settled, by the settle check in MessageWindow.
             Diagnostics.Write("TitleBarMover: " + Describe(hwnd)
                 + (wasMaximized ? " (was maximized, kept maximized)" : "")
                 + " screen " + Array.IndexOf(screens, source) + " -> " + targetIndex
@@ -316,79 +327,33 @@ namespace ShowDesktopOneMonitor
                 + " size " + sourceWidth + "x" + sourceHeight + " -> " + width + "x" + height
                 + " at " + x + "," + y
                 + " target=" + targetArea.Left + "," + targetArea.Top + " " + targetArea.Width + "x" + targetArea.Height
-                + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd) + note);
+                + (wasMaximized
+                    ? " (outcome follows in the settled line)"
+                    : " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd))
+                + note);
+
+            return wasMaximized;
         }
 
         /// <summary>
-        /// The rectangle a window is restored to: its frame while it is not maximized, and
-        /// the normal position out of its placement while it is, so a maximized window can be
-        /// measured without taking it out of the maximized state.
+        /// True when the window's frame covers the monitor's work area. Diagnostic only: it
+        /// turns "the move did not do what was asked" into a line in the log instead of a
+        /// guess. A maximized window is exactly the work area, or a few pixels larger when
+        /// the application draws its own border - never smaller.
         /// </summary>
-        private static bool GetRestoredRect (IntPtr hwnd, bool isMaximized, out RECT rect)
+        private static bool CoversWorkArea (IntPtr hwnd, Rectangle workArea)
         {
-            rect = new RECT();
-            if (!isMaximized) {
-                return GetWindowRect(hwnd, out rect);
+            const int Tolerance = 2;
+
+            RECT rect;
+            if (!GetWindowRect(hwnd, out rect)) {
+                return true; // Nothing to judge when the window cannot be measured.
             }
 
-            WINDOWPLACEMENT placement;
-            if (!TryGetPlacement(hwnd, out placement)) {
-                return false;
-            }
-
-            Point workspace = WorkspaceOrigin();
-            rect.Left = placement.rcNormalPosition.Left + workspace.X;
-            rect.Top = placement.rcNormalPosition.Top + workspace.Y;
-            rect.Right = placement.rcNormalPosition.Right + workspace.X;
-            rect.Bottom = placement.rcNormalPosition.Bottom + workspace.Y;
-            return rect.Right > rect.Left && rect.Bottom > rect.Top;
-        }
-
-        /// <summary>
-        /// Moves a maximized window to another monitor without taking it out of the
-        /// maximized state. The restored rectangle decides which monitor the window belongs
-        /// to, and asking for SW_SHOWMAXIMIZED in the same call lets Windows maximize it
-        /// there - no restore, no second maximize, nothing for the application to
-        /// misinterpret.
-        /// </summary>
-        private static bool PlaceMaximizedWindow (IntPtr hwnd, int x, int y, int width, int height)
-        {
-            WINDOWPLACEMENT placement;
-            if (!TryGetPlacement(hwnd, out placement)) {
-                return false;
-            }
-
-            Point workspace = WorkspaceOrigin();
-            int left = x - workspace.X;
-            int top = y - workspace.Y;
-
-            placement.rcNormalPosition.Left = left;
-            placement.rcNormalPosition.Top = top;
-            placement.rcNormalPosition.Right = left + width;
-            placement.rcNormalPosition.Bottom = top + height;
-            placement.showCmd = SW_SHOWMAXIMIZED;
-
-            return SetWindowPlacement(hwnd, ref placement);
-        }
-
-        private static bool TryGetPlacement (IntPtr hwnd, out WINDOWPLACEMENT placement)
-        {
-            placement = new WINDOWPLACEMENT();
-            placement.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
-            return GetWindowPlacement(hwnd, ref placement);
-        }
-
-        /// <summary>
-        /// Origin of workspace coordinates, the coordinate system WINDOWPLACEMENT uses: it
-        /// starts where the primary monitor's work area starts. Zero with a taskbar at the
-        /// bottom of the primary monitor, and an offset when that taskbar sits at the top or
-        /// on the left.
-        /// </summary>
-        private static Point WorkspaceOrigin ()
-        {
-            Screen primary = Screen.PrimaryScreen;
-            Rectangle area = primary != null ? primary.WorkingArea : Rectangle.Empty;
-            return new Point(area.Left, area.Top);
+            return rect.Left <= workArea.Left + Tolerance
+                && rect.Top <= workArea.Top + Tolerance
+                && rect.Right >= workArea.Right - Tolerance
+                && rect.Bottom >= workArea.Bottom - Tolerance;
         }
 
         /// <summary>
@@ -469,10 +434,22 @@ namespace ShowDesktopOneMonitor
 
         private class MessageWindow : Form
         {
+            // Reads back the outcome of a maximized move: the move itself cannot report it,
+            // because Windows animates the maximize and hands out the rectangle it is drawing
+            // at that moment. Runs on this window's thread, which pumps messages.
+            private readonly System.Windows.Forms.Timer _settleTimer = new System.Windows.Forms.Timer();
+            private IntPtr _settledHwnd = IntPtr.Zero;
+            private int _settledTarget = -1;
+
             public MessageWindow ()
             {
                 _messageWindow = this;
                 try {
+                    _settleTimer.Interval = SettleMilliseconds;
+                    _settleTimer.Tick += delegate {
+                        _settleTimer.Stop();
+                        ReportSettled();
+                    };
                     _hwnd = this.Handle;
                 }
                 finally {
@@ -513,7 +490,7 @@ namespace ShowDesktopOneMonitor
                 base.WndProc(ref m);
             }
 
-            private static void HandlePossibleMove (IntPtr hwnd, int targetIndex)
+            private void HandlePossibleMove (IntPtr hwnd, int targetIndex)
             {
                 try {
                     if (targetIndex < 0) {
@@ -521,11 +498,47 @@ namespace ShowDesktopOneMonitor
                             + " but there is only one screen - nothing to do, the click passed through");
                         return;
                     }
-                    MoveToScreen(hwnd, targetIndex);
+                    if (MoveToScreen(hwnd, targetIndex)) {
+                        _settledHwnd = hwnd;
+                        _settledTarget = targetIndex;
+                        _settleTimer.Stop();
+                        _settleTimer.Start();
+                    }
                 }
                 catch (Exception ex) {
                     Diagnostics.Write("TitleBarMover: handling the middle-click failed", ex);
                 }
+            }
+
+            /// <summary>
+            /// One line about what the moved window really looks like once the animation is
+            /// over: which monitor it ended up on, its rectangle and whether it fills that
+            /// monitor's work area.
+            /// </summary>
+            private void ReportSettled ()
+            {
+                IntPtr hwnd = _settledHwnd;
+                if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) {
+                    Diagnostics.Write("TitleBarMover: settled check skipped, the window is gone");
+                    return;
+                }
+
+                Screen[] screens = Screen.AllScreens;
+                int index = Array.IndexOf(screens, Screen.FromHandle(hwnd));
+                string note = "";
+                if (_settledTarget >= 0 && _settledTarget < screens.Length) {
+                    Rectangle targetArea = screens[_settledTarget].WorkingArea;
+                    if (index != _settledTarget) {
+                        note = "  [did not end up on the target monitor]";
+                    }
+                    else if (IsZoomed(hwnd) && !CoversWorkArea(hwnd, targetArea)) {
+                        note = "  [maximized but not covering the target work area]";
+                    }
+                }
+
+                Diagnostics.Write("TitleBarMover: settled " + Describe(hwnd)
+                    + " on screen " + index + " (wanted " + _settledTarget + ")"
+                    + " result=" + DescribeRect(hwnd) + " zoomed=" + IsZoomed(hwnd) + note);
             }
 
             protected override void SetVisibleCore (bool value)
@@ -548,19 +561,6 @@ namespace ShowDesktopOneMonitor
             public int Top;
             public int Right;
             public int Bottom;
-        }
-
-        // The window's state and its restored rectangle, as Windows stores them. The
-        // coordinates are workspace coordinates, and the two point fields are reserved.
-        [StructLayout(LayoutKind.Sequential)]
-        private struct WINDOWPLACEMENT
-        {
-            public int length;
-            public int flags;
-            public int showCmd;
-            public POINT ptMinPosition;
-            public POINT ptMaxPosition;
-            public RECT rcNormalPosition;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -622,10 +622,7 @@ namespace ShowDesktopOneMonitor
         private static extern bool SetWindowPos (IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
         [DllImport("user32.dll")]
-        private static extern bool GetWindowPlacement (IntPtr hwnd, ref WINDOWPLACEMENT placement);
-
-        [DllImport("user32.dll")]
-        private static extern bool SetWindowPlacement (IntPtr hwnd, ref WINDOWPLACEMENT placement);
+        private static extern bool ShowWindow (IntPtr hwnd, int command);
 
         [DllImport("user32.dll")]
         private static extern int GetSystemMetrics (int index);

@@ -88,14 +88,16 @@ sees: carried over at its physical size it would come out a third smaller on the
 the higher scale factor. A window that does not fit the target monitor is shrunk to that
 monitor's work area instead of hanging off its edge.
 
-A maximized window is not restored, positioned and maximized again: that hands the application
-a restored window in the middle of a DPI change, and an application that manages its own size
-(NetEase's UU远程 session window, for example) answers with a window of its own and shrinks with
-every move. It is moved with `SetWindowPlacement`, which changes the restored rectangle and the
-maximized state in one call, so the window never leaves the maximized state and Windows computes
-the maximized frame from the monitor it lands on; an application that pins its own size only gets
-moved, never resized. The log line prints `dpi A -> B`, `size` before and after the conversion,
-`at x,y`, `target=`, `result=` and `zoomed=`, so every move can be checked.
+A maximized window is moved by restoring it, placing it on the target monitor and maximizing it
+again: `SetWindowPlacement` and `SetWindowPos` both report success on a maximized window and leave
+it exactly where it was (measured on this machine). The size that is carried over is always
+measured on the monitor the window is really on, never read back from stored window geometry -
+such a value can belong to the other monitor's scale factor, and scaling it again shrinks the
+window with every move. An application that manages its own size (NetEase's UU远程, for example)
+only gets moved, never resized. Every move logs one line (`dpi A -> B`, `size` before and after the
+conversion, `at x,y`, `target=`) and, 900 ms later, a `settled` line with the monitor the window
+ended up on, `result=`, `zoomed=`, and a note when it did not reach the target monitor or does not
+cover that monitor's work area while maximized.
 
 Only the caption area reacts, so middle-click keeps its normal meaning everywhere else
 (opening a link in a new tab, closing a tab, autoscroll, paste). With a single monitor
