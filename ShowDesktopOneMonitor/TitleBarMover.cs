@@ -85,6 +85,12 @@ namespace ShowDesktopOneMonitor
         private static IntPtr _hook = IntPtr.Zero;
         private static bool _swallowButtonUp;
 
+        /// <summary>
+        /// When false, middle clicks on title bars are passed through untouched.
+        /// Switched from the tray menu.
+        /// </summary>
+        public static volatile bool Enabled = true;
+
         static TitleBarMover ()
         {
             Thread messageLoop = new Thread(delegate ()
@@ -110,7 +116,7 @@ namespace ShowDesktopOneMonitor
 
         private static IntPtr HookProc (int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0) {
+            if (nCode >= 0 && Enabled) {
                 int message = wParam.ToInt32();
 
                 if (message == WM_MBUTTONDOWN || message == WM_NCMBUTTONDOWN) {

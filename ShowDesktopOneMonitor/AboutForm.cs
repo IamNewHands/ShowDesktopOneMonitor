@@ -1,0 +1,253 @@
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
+
+namespace ShowDesktopOneMonitor
+{
+    internal class AboutForm : Form
+    {
+        private Label lblStatus;
+        private ProgressBar progressBar;
+        private Button btnCheckUpdate;
+        private Button btnClose;
+
+        public AboutForm ()
+        {
+            InitializeComponent();
+        }
+
+        private void InitializeComponent ()
+        {
+            this.Text = Localization.AboutTitle;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.ShowInTaskbar = true;
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.ClientSize = new Size(580, 530);
+            this.BackColor = Color.White;
+            this.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+
+            try {
+                this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            }
+            catch {
+            }
+
+            // Top Header Panel
+            Panel topPanel = new Panel {
+                Dock = DockStyle.Top,
+                Height = 85,
+                BackColor = Color.FromArgb(248, 249, 250),
+                Padding = new Padding(16, 12, 16, 12)
+            };
+
+            PictureBox picIcon = new PictureBox {
+                Size = new Size(48, 48),
+                Location = new Point(16, 16),
+                SizeMode = PictureBoxSizeMode.StretchImage
+            };
+            if (this.Icon != null) {
+                picIcon.Image = this.Icon.ToBitmap();
+            }
+
+            Label lblTitle = new Label {
+                Text = "ShowDesktopOneMonitor",
+                Font = new Font("Segoe UI", 13F, FontStyle.Bold),
+                Location = new Point(74, 14),
+                AutoSize = true
+            };
+
+            string shortSha = BuildInfo.CommitSha.Length > 7 ? BuildInfo.CommitSha.Substring(0, 7) : BuildInfo.CommitSha;
+            Label lblVersion = new Label {
+                Text = Localization.CurrentVersion + "Build #" + BuildInfo.BuildNumber + " (" + shortSha + ")",
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 100, 100),
+                Location = new Point(76, 40),
+                AutoSize = true
+            };
+
+            LinkLabel linkGitHub = new LinkLabel {
+                Text = "GitHub Repository",
+                Location = new Point(76, 58),
+                AutoSize = true
+            };
+            linkGitHub.LinkClicked += (s, e) =>
+            {
+                try {
+                    Process.Start("https://github.com/IamNewHands/ShowDesktopOneMonitor");
+                }
+                catch { }
+            };
+
+            topPanel.Controls.Add(picIcon);
+            topPanel.Controls.Add(lblTitle);
+            topPanel.Controls.Add(lblVersion);
+            topPanel.Controls.Add(linkGitHub);
+
+            // Bottom Action Panel
+            Panel bottomPanel = new Panel {
+                Dock = DockStyle.Bottom,
+                Height = 70,
+                BackColor = Color.FromArgb(248, 249, 250),
+                Padding = new Padding(16, 10, 16, 10)
+            };
+
+            lblStatus = new Label {
+                Text = "",
+                Location = new Point(16, 12),
+                Size = new Size(320, 20),
+                ForeColor = Color.FromArgb(70, 70, 70),
+                AutoEllipsis = true
+            };
+
+            progressBar = new ProgressBar {
+                Location = new Point(16, 36),
+                Size = new Size(320, 14),
+                Visible = false,
+                Style = ProgressBarStyle.Continuous
+            };
+
+            btnCheckUpdate = new Button {
+                Text = Localization.CheckForUpdates,
+                Size = new Size(130, 34),
+                Location = new Point(346, 18),
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnCheckUpdate.FlatAppearance.BorderSize = 0;
+            btnCheckUpdate.Click += OnCheckUpdateClick;
+
+            btnClose = new Button {
+                Text = Localization.Close,
+                Size = new Size(80, 34),
+                Location = new Point(484, 18),
+                BackColor = Color.FromArgb(235, 236, 239),
+                ForeColor = Color.Black,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose.Click += (s, e) => this.Close();
+
+            bottomPanel.Controls.Add(lblStatus);
+            bottomPanel.Controls.Add(progressBar);
+            bottomPanel.Controls.Add(btnCheckUpdate);
+            bottomPanel.Controls.Add(btnClose);
+
+            // Content Panel (scrollable feature guide)
+            Panel contentPanel = new Panel {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                Padding = new Padding(16, 12, 16, 12),
+                BackColor = Color.White
+            };
+
+            int y = 10;
+            y = AddFeatureCard(contentPanel, y, Localization.FeatureWinDTitle, Localization.FeatureWinDDesc);
+            y = AddFeatureCard(contentPanel, y, Localization.FeatureMoveTitle, Localization.FeatureMoveDesc);
+            y = AddFeatureCard(contentPanel, y, Localization.FeatureAutoStartTitle, Localization.FeatureAutoStartDesc);
+            y = AddFeatureCard(contentPanel, y, Localization.FeatureLogTitle, Localization.FeatureLogDesc);
+
+            this.Controls.Add(contentPanel);
+            this.Controls.Add(bottomPanel);
+            this.Controls.Add(topPanel);
+        }
+
+        private int AddFeatureCard (Panel container, int y, string title, string desc)
+        {
+            Label lblCardTitle = new Label {
+                Text = title,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(30, 30, 30),
+                Location = new Point(16, y),
+                AutoSize = true
+            };
+            container.Controls.Add(lblCardTitle);
+            y += 22;
+
+            Label lblCardDesc = new Label {
+                Text = desc,
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(80, 80, 80),
+                Location = new Point(20, y),
+                Width = 510,
+                AutoSize = true,
+                MaximumSize = new Size(510, 0)
+            };
+            container.Controls.Add(lblCardDesc);
+            y += lblCardDesc.PreferredHeight + 14;
+
+            return y;
+        }
+
+        private async void OnCheckUpdateClick (object sender, EventArgs e)
+        {
+            btnCheckUpdate.Enabled = false;
+            lblStatus.Text = Localization.CheckingUpdates;
+            lblStatus.ForeColor = Color.FromArgb(70, 70, 70);
+
+            UpdateCheckResult result = await AppUpdateManager.CheckForUpdatesAsync();
+
+            if (!result.Success) {
+                lblStatus.Text = Localization.UpdateFailed + ": " + result.ErrorMessage;
+                lblStatus.ForeColor = Color.FromArgb(200, 30, 30);
+                btnCheckUpdate.Enabled = true;
+                return;
+            }
+
+            if (!result.HasUpdate) {
+                lblStatus.Text = string.Format(Localization.AlreadyLatest + " (Build #{0})", BuildInfo.BuildNumber);
+                lblStatus.ForeColor = Color.FromArgb(0, 130, 50);
+                btnCheckUpdate.Enabled = true;
+                return;
+            }
+
+            // New version found
+            lblStatus.Text = string.Format(Localization.NewVersionFound, result.RemoteRunNumber);
+            lblStatus.ForeColor = Color.FromArgb(0, 102, 204);
+
+            string promptMsg = string.Format(Localization.NewVersionFound, result.RemoteRunNumber);
+            DialogResult dr = MessageBox.Show(this, promptMsg, Localization.AboutTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (dr == DialogResult.Yes) {
+                progressBar.Visible = true;
+                progressBar.Value = 0;
+                btnCheckUpdate.Enabled = false;
+                btnClose.Enabled = false;
+
+                AppUpdateManager.DownloadAndApplyUpdateAsync(
+                    progress =>
+                    {
+                        if (this.IsHandleCreated && !this.IsDisposed) {
+                            this.BeginInvoke((Action)(() =>
+                            {
+                                progressBar.Value = progress;
+                                lblStatus.Text = string.Format(Localization.DownloadingUpdate, progress);
+                            }));
+                        }
+                    },
+                    error =>
+                    {
+                        if (this.IsHandleCreated && !this.IsDisposed) {
+                            this.BeginInvoke((Action)(() =>
+                            {
+                                progressBar.Visible = false;
+                                lblStatus.Text = Localization.UpdateFailed + ": " + error.Message;
+                                lblStatus.ForeColor = Color.FromArgb(200, 30, 30);
+                                btnCheckUpdate.Enabled = true;
+                                btnClose.Enabled = true;
+                            }));
+                        }
+                    }
+                );
+            }
+            else {
+                btnCheckUpdate.Enabled = true;
+            }
+        }
+    }
+}

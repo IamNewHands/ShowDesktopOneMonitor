@@ -21,6 +21,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Stamp build info
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}"
+          $run = "${{ github.run_number }}"
+          $code = "namespace ShowDesktopOneMonitor`r`n{`r`n    internal static class BuildInfo`r`n    {`r`n        public const string CommitSha = `"$sha`";`r`n        public const string BuildNumber = `"$run`";`r`n    }`r`n}"
+          Set-Content -Path ShowDesktopOneMonitor/BuildInfo.cs -Value $code -Encoding UTF8
+
       - name: Build (Release, net48)
         run: dotnet build ShowDesktopOneMonitor/ShowDesktopOneMonitor.csproj -c Release
 
@@ -52,6 +60,13 @@ jobs:
           path: ShowDesktopOneMonitor-win11.zip
           if-no-files-found: error
 
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $commitMsg = git log -1 --pretty=format:"%s%n%n%b"
+          $notes = "Automatically built from `${{ github.sha }}` (workflow run #${{ github.run_number }}).`r`n`r`n### 变更说明 / What's Changed`r`n$commitMsg`r`n`r`n---`r`n- 包含单文件: ``ShowDesktopOneMonitor.exe```r`n- 运行环境: .NET Framework 4.8 (Windows 10 2004+ 与 Windows 11 自带)"
+          Set-Content -Path release_notes.md -Value $notes -Encoding UTF8
+
       # A single rolling release. It is reused on every build and the asset is
       # replaced, so there is never more than one release and it always holds
       # only the newest exe.
@@ -60,15 +75,7 @@ jobs:
         with:
           tag_name: latest-build
           name: Latest build (Windows 11)
-          body: |
-            Automatically built from `${{ github.sha }}`
-            (workflow run #${{ github.run_number }}).
-
-            Contains a single file: `ShowDesktopOneMonitor.exe`.
-            Requires .NET Framework 4.8, which is built into Windows 10 2004+ and Windows 11.
-
-            Usage: run it, then press *Win + D* (or *Win + Shift + D*) to minimize or
-            restore the windows on the monitor under the cursor.
+          body_path: release_notes.md
           files: ShowDesktopOneMonitor/bin/Release/net48/ShowDesktopOneMonitor.exe
           make_latest: true
           prerelease: false

@@ -49,15 +49,16 @@ you also want the config file.
 
 Requires .NET Framework 4.8 (built into Windows 10 2004+ and Windows 11).
 
-## Installation
+## Installation and Auto-start
 1. Put `ShowDesktopOneMonitor.exe` in a folder you can write to (the diagnostic log lives next to it).
-2. Create a task in Task Scheduler:
-- Specify path to *ShowDesktopOneMonitor.exe*
-- Trigger: *Run only when user is logged on*
-- *Run with highest privileges* is only needed if you want to move the windows of elevated
-  apps; it is not needed for the normal features (see *Running as administrator*)
-- On the *Settings* tab make sure the task will not be stopped after running longer than some days, for example.
-Note: program has icon in tray, but unfortunatelly it is invisible, if app is started from Task Scheduler :(
+2. Run the executable and right-click the system tray icon:
+   - **Language**: Switch between English and Simplified Chinese under `Language (语言)`. The menu updates immediately and persists across restarts.
+   - **Middle-click window moving switch**: Toggle `Move window with middle click` on or off anytime.
+   - **Auto-start options**: Choose under `Start with Windows`:
+     - **Normal user (Registry)**: Written to HKCU Run key. Starts with normal user privileges without UAC prompts.
+     - **Administrator (Task Scheduler, no UAC)**: Registers an elevated task in Windows Task Scheduler (`HighestAvailable` run level). Starts elevated automatically at logon with **zero UAC prompts** (requires confirming UAC only once when enabling). Allows moving windows belonging to elevated administrator apps.
+     - **Disabled**: Clears both registry and task scheduler auto-start entries.
+   - **About & Auto-Update**: Click `About` to view app info, feature guides, and usage instructions. Click `Check for Updates` to check GitHub releases, download updates automatically, and smoothly restart the application into the latest version.
 
 ## Usage
 Press *Win + D* to minimize/restore windows **on monitor where cursor is currently on**.

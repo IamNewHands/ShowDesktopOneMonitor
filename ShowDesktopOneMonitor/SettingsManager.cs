@@ -42,6 +42,26 @@ namespace ShowDesktopOneMonitor
             SETTINGS.SuppressUnsteerableAnimation = suppress;
         }
 
+        public static bool ReadMiddleClickMoveEnabled ()
+        {
+            return SETTINGS.MiddleClickMoveEnabled;
+        }
+
+        public static void WriteMiddleClickMoveEnabled (bool enabled)
+        {
+            SETTINGS.MiddleClickMoveEnabled = enabled;
+        }
+
+        public static string ReadLanguage ()
+        {
+            return SETTINGS.Language;
+        }
+
+        public static void WriteLanguage (string language)
+        {
+            SETTINGS.Language = language;
+        }
+
         public static void Save () => SETTINGS.Save();
 
     }

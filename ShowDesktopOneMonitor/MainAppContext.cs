@@ -22,45 +22,34 @@ namespace ShowDesktopOneMonitor
             // first line is written.
             Diagnostics.Enabled = SettingsManager.ReadLoggingEnabled();
             MinimizeAnimation.SuppressUnsteerableAnimation = SettingsManager.ReadSuppressUnsteerableAnimation();
+            AutoStartup.CheckAndUpdatePathIfNeeded();
 
             Application.ThreadException += this.Application_ThreadException;
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             AppDomain.CurrentDomain.UnhandledException += this.CurrentDomain_UnhandledException;
 
+            TitleBarMover.Enabled = SettingsManager.ReadMiddleClickMoveEnabled();
+
             Icon trayIconImage = LoadTrayIcon();
             Diagnostics.Write("tray icon image loaded: " + trayIconImage.Width + "x" + trayIconImage.Height);
 
-            // Checkable tray item: the log writes a lot while debugging a monitor setup,
-            // and it can be silenced completely without restarting the app.
-            MenuItem loggingItem = new MenuItem("Write log file", (s, e) => ToggleLogging((MenuItem)s));
-            loggingItem.Checked = Diagnostics.Enabled;
-
-            // Off by default: skipping the animation of a window Windows will not aim broke
-            // the secondary screen on the machine this was tried on, so it stays a switch
-            // until that is understood.
-            MenuItem animationItem = new MenuItem("No animation without a taskbar button",
-                (s, e) => ToggleUnsteerableAnimation((MenuItem)s));
-            animationItem.Checked = MinimizeAnimation.SuppressUnsteerableAnimation;
-
             trayIcon = new NotifyIcon() {
                 Icon = trayIconImage,
-                ContextMenu = new ContextMenu(new MenuItem[] {
-                    new MenuItem("Open log folder", (s, e) => OpenLogFolder()),
-                    loggingItem,
-                    animationItem,
-                    new MenuItem("-"),
-                    new MenuItem("Exit", (s, e) => {trayIcon.Visible = false; Application.Exit(); }),
-                }),
                 Visible = true,
                 Text = "Show Desktop Enhanced",
             };
+            BuildTrayMenu();
+
             Diagnostics.Write("tray icon created, Visible=" + trayIcon.Visible);
             PrevStateByScreen = new List<DesktopWindowID>[Screen.AllScreens.Length];
 
             Keys hotKey = SettingsManager.ReadHotkey();
             KeyModifiers keyModifiers = SettingsManager.ReadKeyModifiers();
             Diagnostics.Write("configured hot key: key=" + hotKey + " modifiers=" + keyModifiers
-                + "  screens=" + Screen.AllScreens.Length);
+                + "  screens=" + Screen.AllScreens.Length
+                + "  autoStartup=" + AutoStartup.GetCurrentMode()
+                + "  middleClick=" + TitleBarMover.Enabled
+                + "  lang=" + Localization.CurrentLanguage);
 
             int primaryHotKeyId = HotKeyManager.RegisterHotKey(hotKey, keyModifiers);
             Diagnostics.Write("registered hot key id=" + primaryHotKeyId);
@@ -91,6 +80,118 @@ namespace ShowDesktopOneMonitor
             Diagnostics.Write("startup complete, waiting for the hot key");
         }
 
+        private MenuItem _loggingItem;
+        private MenuItem _animationItem;
+        private MenuItem _middleClickItem;
+        private MenuItem _autoStartMenu;
+        private MenuItem _autoStartDisabledItem;
+        private MenuItem _autoStartNormalItem;
+        private MenuItem _autoStartAdminItem;
+        private MenuItem _languageMenu;
+        private MenuItem _langEnItem;
+        private MenuItem _langZhItem;
+
+        private void BuildTrayMenu ()
+        {
+            _loggingItem = new MenuItem(Localization.WriteLogFile, (s, e) => ToggleLogging((MenuItem)s));
+            _animationItem = new MenuItem(Localization.NoAnimationWithoutTaskbarButton, (s, e) => ToggleUnsteerableAnimation((MenuItem)s));
+            _middleClickItem = new MenuItem(Localization.MiddleClickMove, (s, e) => ToggleMiddleClickMove((MenuItem)s));
+
+            _autoStartDisabledItem = new MenuItem(Localization.AutoStartDisabled, (s, e) => SetAutoStart(AutoStartupMode.Disabled));
+            _autoStartNormalItem = new MenuItem(Localization.AutoStartNormal, (s, e) => SetAutoStart(AutoStartupMode.Normal));
+            _autoStartAdminItem = new MenuItem(Localization.AutoStartAdmin, (s, e) => SetAutoStart(AutoStartupMode.Administrator));
+
+            _autoStartMenu = new MenuItem(Localization.StartWithWindows, new MenuItem[] {
+                _autoStartDisabledItem,
+                _autoStartNormalItem,
+                _autoStartAdminItem,
+            });
+
+            _langEnItem = new MenuItem("English", (s, e) => ChangeLanguage("en"));
+            _langZhItem = new MenuItem("简体中文", (s, e) => ChangeLanguage("zh-CN"));
+
+            _languageMenu = new MenuItem(Localization.LanguageMenu, new MenuItem[] {
+                _langEnItem,
+                _langZhItem,
+            });
+
+            ContextMenu trayMenu = new ContextMenu(new MenuItem[] {
+                new MenuItem(Localization.OpenLogFolder, (s, e) => OpenLogFolder()),
+                _loggingItem,
+                _animationItem,
+                _middleClickItem,
+                _autoStartMenu,
+                _languageMenu,
+                new MenuItem(Localization.About, (s, e) => ShowAboutForm()),
+                new MenuItem("-"),
+                new MenuItem(Localization.Exit, (s, e) => { trayIcon.Visible = false; Application.Exit(); }),
+            });
+
+            trayMenu.Popup += (s, e) => RefreshMenuState();
+
+            trayIcon.ContextMenu = trayMenu;
+            RefreshMenuState();
+        }
+
+        private AboutForm _aboutForm = null;
+
+        private void ShowAboutForm ()
+        {
+            if (_aboutForm == null || _aboutForm.IsDisposed) {
+                _aboutForm = new AboutForm();
+                _aboutForm.Show();
+            }
+            else {
+                _aboutForm.BringToFront();
+                _aboutForm.Activate();
+            }
+        }
+
+        private void RefreshMenuState ()
+        {
+            if (_loggingItem != null) _loggingItem.Checked = Diagnostics.Enabled;
+            if (_animationItem != null) _animationItem.Checked = MinimizeAnimation.SuppressUnsteerableAnimation;
+            if (_middleClickItem != null) _middleClickItem.Checked = TitleBarMover.Enabled;
+
+            AutoStartupMode mode = AutoStartup.GetCurrentMode();
+            if (_autoStartDisabledItem != null) _autoStartDisabledItem.Checked = (mode == AutoStartupMode.Disabled);
+            if (_autoStartNormalItem != null) _autoStartNormalItem.Checked = (mode == AutoStartupMode.Normal);
+            if (_autoStartAdminItem != null) _autoStartAdminItem.Checked = (mode == AutoStartupMode.Administrator);
+
+            if (_langEnItem != null) _langEnItem.Checked = !Localization.IsChinese;
+            if (_langZhItem != null) _langZhItem.Checked = Localization.IsChinese;
+        }
+
+        private void ChangeLanguage (string lang)
+        {
+            Localization.CurrentLanguage = lang;
+            SettingsManager.WriteLanguage(lang);
+            SettingsManager.Save();
+            BuildTrayMenu();
+            if (_aboutForm != null && !_aboutForm.IsDisposed) {
+                _aboutForm.Close();
+                _aboutForm = new AboutForm();
+                _aboutForm.Show();
+            }
+            Diagnostics.Write("language changed to " + lang);
+        }
+
+        private void SetAutoStart (AutoStartupMode targetMode)
+        {
+            AutoStartupMode current = AutoStartup.GetCurrentMode();
+            if (current == targetMode && targetMode != AutoStartupMode.Disabled) {
+                targetMode = AutoStartupMode.Disabled;
+            }
+
+            if (AutoStartup.SetMode(targetMode)) {
+                Diagnostics.Write("auto-startup mode set to " + targetMode);
+            }
+            else {
+                Diagnostics.Write("failed to set auto-startup mode to " + targetMode);
+            }
+            RefreshMenuState();
+        }
+
         // Tray menu switch for the diagnostic log. The state goes into the settings file,
         // so a silenced log stays silenced across restarts.
         private static void ToggleLogging (MenuItem item)
@@ -112,6 +213,18 @@ namespace ShowDesktopOneMonitor
             SettingsManager.WriteSuppressUnsteerableAnimation(enabled);
             SettingsManager.Save();
             Diagnostics.Write("no-animation for button-less windows " + (enabled ? "enabled" : "disabled")
+                + " from the tray menu");
+        }
+
+        // Tray menu switch for moving windows by middle-clicking title bars.
+        private static void ToggleMiddleClickMove (MenuItem item)
+        {
+            bool enabled = !item.Checked;
+            item.Checked = enabled;
+            TitleBarMover.Enabled = enabled;
+            SettingsManager.WriteMiddleClickMoveEnabled(enabled);
+            SettingsManager.Save();
+            Diagnostics.Write("middle-click title bar moving " + (enabled ? "enabled" : "disabled")
                 + " from the tray menu");
         }
 

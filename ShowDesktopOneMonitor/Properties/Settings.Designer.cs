@@ -74,5 +74,29 @@ namespace ShowDesktopOneMonitor.Properties {
                 this["SuppressUnsteerableAnimation"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool MiddleClickMoveEnabled {
+            get {
+                return ((bool)(this["MiddleClickMoveEnabled"]));
+            }
+            set {
+                this["MiddleClickMoveEnabled"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string Language {
+            get {
+                return ((string)(this["Language"]));
+            }
+            set {
+                this["Language"] = value;
+            }
+        }
     }
 }
