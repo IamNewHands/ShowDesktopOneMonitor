@@ -4,6 +4,13 @@ using System.Windows.Forms;
 
 namespace ShowDesktopOneMonitor
 {
+    public enum HotkeyMode
+    {
+        WinShiftD = 0, // Win + Shift + D (默认)
+        WinD = 1,      // Win + D (覆盖系统 Win+D)
+        Both = 2       // 两者均支持 (Win+Shift+D 与 Win+D)
+    }
+
     /// <summary>
     /// Util class for reading and writing to settings file
     /// </summary>
@@ -20,6 +27,21 @@ namespace ShowDesktopOneMonitor
             KeyModifiers modifiers = SETTINGS.KeyModifiers[0];
             Array.ForEach(SETTINGS.KeyModifiers, m => modifiers |= m);
             return modifiers;
+        }
+
+        public static HotkeyMode ReadHotkeyMode ()
+        {
+            try {
+                return (HotkeyMode)SETTINGS.HotkeyMode;
+            }
+            catch {
+                return HotkeyMode.WinShiftD;
+            }
+        }
+
+        public static void WriteHotkeyMode (HotkeyMode mode)
+        {
+            SETTINGS.HotkeyMode = (int)mode;
         }
 
         public static bool ReadLoggingEnabled ()

@@ -39,14 +39,14 @@ namespace ShowDesktopOneMonitor
             // Top Header Panel
             Panel topPanel = new Panel {
                 Dock = DockStyle.Top,
-                Height = 85,
+                Height = 105,
                 BackColor = Color.FromArgb(248, 249, 250),
                 Padding = new Padding(16, 12, 16, 12)
             };
 
             PictureBox picIcon = new PictureBox {
                 Size = new Size(48, 48),
-                Location = new Point(16, 16),
+                Location = new Point(16, 20),
                 SizeMode = PictureBoxSizeMode.StretchImage
             };
             if (this.Icon != null) {
@@ -55,24 +55,23 @@ namespace ShowDesktopOneMonitor
 
             Label lblTitle = new Label {
                 Text = "ShowDesktopOneMonitor",
-                Font = new Font("Segoe UI", 13F, FontStyle.Bold),
-                Location = new Point(74, 14),
-                AutoSize = true
+                Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 5)
             };
 
-            string shortSha = BuildInfo.CommitSha.Length > 7 ? BuildInfo.CommitSha.Substring(0, 7) : BuildInfo.CommitSha;
             Label lblVersion = new Label {
-                Text = Localization.CurrentVersion + "Build #" + BuildInfo.BuildNumber + " (" + shortSha + ")",
+                Text = Localization.CurrentVersion + "v" + BuildInfo.Version,
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
-                ForeColor = Color.FromArgb(100, 100, 100),
-                Location = new Point(76, 40),
-                AutoSize = true
+                ForeColor = Color.FromArgb(90, 90, 90),
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 5)
             };
 
             LinkLabel linkGitHub = new LinkLabel {
                 Text = "GitHub Repository",
-                Location = new Point(76, 58),
-                AutoSize = true
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 0)
             };
             linkGitHub.LinkClicked += (s, e) =>
             {
@@ -82,10 +81,20 @@ namespace ShowDesktopOneMonitor
                 catch { }
             };
 
+            FlowLayoutPanel headerTextPanel = new FlowLayoutPanel {
+                Location = new Point(74, 15),
+                Size = new Size(480, 80),
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            headerTextPanel.Controls.Add(lblTitle);
+            headerTextPanel.Controls.Add(lblVersion);
+            headerTextPanel.Controls.Add(linkGitHub);
+
             topPanel.Controls.Add(picIcon);
-            topPanel.Controls.Add(lblTitle);
-            topPanel.Controls.Add(lblVersion);
-            topPanel.Controls.Add(linkGitHub);
+            topPanel.Controls.Add(headerTextPanel);
 
             // Bottom Action Panel
             Panel bottomPanel = new Panel {
@@ -201,17 +210,17 @@ namespace ShowDesktopOneMonitor
             }
 
             if (!result.HasUpdate) {
-                lblStatus.Text = string.Format(Localization.AlreadyLatest + " (Build #{0})", BuildInfo.BuildNumber);
+                lblStatus.Text = string.Format(Localization.AlreadyLatest + " (v{0})", BuildInfo.Version);
                 lblStatus.ForeColor = Color.FromArgb(0, 130, 50);
                 btnCheckUpdate.Enabled = true;
                 return;
             }
 
             // New version found
-            lblStatus.Text = string.Format(Localization.NewVersionFound, result.RemoteRunNumber);
+            lblStatus.Text = string.Format(Localization.NewVersionFound, result.RemoteVersion);
             lblStatus.ForeColor = Color.FromArgb(0, 102, 204);
 
-            string promptMsg = string.Format(Localization.NewVersionFound, result.RemoteRunNumber);
+            string promptMsg = string.Format(Localization.NewVersionFound, result.RemoteVersion);
             DialogResult dr = MessageBox.Show(this, promptMsg, Localization.AboutTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Information);
             if (dr == DialogResult.Yes) {
                 progressBar.Visible = true;

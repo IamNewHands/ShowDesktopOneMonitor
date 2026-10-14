@@ -43,28 +43,7 @@ namespace ShowDesktopOneMonitor
             Diagnostics.Write("tray icon created, Visible=" + trayIcon.Visible);
             PrevStateByScreen = new List<DesktopWindowID>[Screen.AllScreens.Length];
 
-            Keys hotKey = SettingsManager.ReadHotkey();
-            KeyModifiers keyModifiers = SettingsManager.ReadKeyModifiers();
-            Diagnostics.Write("configured hot key: key=" + hotKey + " modifiers=" + keyModifiers
-                + "  screens=" + Screen.AllScreens.Length
-                + "  autoStartup=" + AutoStartup.GetCurrentMode()
-                + "  middleClick=" + TitleBarMover.Enabled
-                + "  lang=" + Localization.CurrentLanguage);
-
-            int primaryHotKeyId = HotKeyManager.RegisterHotKey(hotKey, keyModifiers);
-            Diagnostics.Write("registered hot key id=" + primaryHotKeyId);
-
-            // Take over Win+D natively (overriding the shell's show-desktop) so the
-            // same action fires without an extra remapping layer. Two keyboard hooks
-            // swallowing and injecting keys around each other desync the Win key
-            // state and cause the stuck-Win-key "ghost press".
-            if (!(hotKey == Keys.D && keyModifiers == KeyModifiers.Windows)) {
-                int winDId = HotKeyManager.RegisterHotKey(Keys.D, KeyModifiers.Windows);
-                Diagnostics.Write("registered Win+D id=" + winDId);
-            }
-            else {
-                Diagnostics.Write("Win+D already covered by the configured hot key");
-            }
+            RegisterConfiguredHotkeys();
 
             HotKeyManager.HotKeyPressed += new EventHandler<HotKeyEventArgs>(OnHotkeyPressed);
 
@@ -83,6 +62,10 @@ namespace ShowDesktopOneMonitor
         private MenuItem _loggingItem;
         private MenuItem _animationItem;
         private MenuItem _middleClickItem;
+        private MenuItem _hotkeyMenu;
+        private MenuItem _hotkeyWinShiftDItem;
+        private MenuItem _hotkeyWinDItem;
+        private MenuItem _hotkeyBothItem;
         private MenuItem _autoStartMenu;
         private MenuItem _autoStartDisabledItem;
         private MenuItem _autoStartNormalItem;
@@ -96,6 +79,16 @@ namespace ShowDesktopOneMonitor
             _loggingItem = new MenuItem(Localization.WriteLogFile, (s, e) => ToggleLogging((MenuItem)s));
             _animationItem = new MenuItem(Localization.NoAnimationWithoutTaskbarButton, (s, e) => ToggleUnsteerableAnimation((MenuItem)s));
             _middleClickItem = new MenuItem(Localization.MiddleClickMove, (s, e) => ToggleMiddleClickMove((MenuItem)s));
+
+            _hotkeyWinShiftDItem = new MenuItem(Localization.HotkeyWinShiftD, (s, e) => SetHotkeyMode(HotkeyMode.WinShiftD));
+            _hotkeyWinDItem = new MenuItem(Localization.HotkeyWinD, (s, e) => SetHotkeyMode(HotkeyMode.WinD));
+            _hotkeyBothItem = new MenuItem(Localization.HotkeyBoth, (s, e) => SetHotkeyMode(HotkeyMode.Both));
+
+            _hotkeyMenu = new MenuItem(Localization.HotkeyMenu, new MenuItem[] {
+                _hotkeyWinShiftDItem,
+                _hotkeyWinDItem,
+                _hotkeyBothItem,
+            });
 
             _autoStartDisabledItem = new MenuItem(Localization.AutoStartDisabled, (s, e) => SetAutoStart(AutoStartupMode.Disabled));
             _autoStartNormalItem = new MenuItem(Localization.AutoStartNormal, (s, e) => SetAutoStart(AutoStartupMode.Normal));
@@ -120,6 +113,7 @@ namespace ShowDesktopOneMonitor
                 _loggingItem,
                 _animationItem,
                 _middleClickItem,
+                _hotkeyMenu,
                 _autoStartMenu,
                 _languageMenu,
                 new MenuItem(Localization.About, (s, e) => ShowAboutForm()),
@@ -153,6 +147,11 @@ namespace ShowDesktopOneMonitor
             if (_animationItem != null) _animationItem.Checked = MinimizeAnimation.SuppressUnsteerableAnimation;
             if (_middleClickItem != null) _middleClickItem.Checked = TitleBarMover.Enabled;
 
+            HotkeyMode hotkeyMode = SettingsManager.ReadHotkeyMode();
+            if (_hotkeyWinShiftDItem != null) _hotkeyWinShiftDItem.Checked = (hotkeyMode == HotkeyMode.WinShiftD);
+            if (_hotkeyWinDItem != null) _hotkeyWinDItem.Checked = (hotkeyMode == HotkeyMode.WinD);
+            if (_hotkeyBothItem != null) _hotkeyBothItem.Checked = (hotkeyMode == HotkeyMode.Both);
+
             AutoStartupMode mode = AutoStartup.GetCurrentMode();
             if (_autoStartDisabledItem != null) _autoStartDisabledItem.Checked = (mode == AutoStartupMode.Disabled);
             if (_autoStartNormalItem != null) _autoStartNormalItem.Checked = (mode == AutoStartupMode.Normal);
@@ -160,6 +159,44 @@ namespace ShowDesktopOneMonitor
 
             if (_langEnItem != null) _langEnItem.Checked = !Localization.IsChinese;
             if (_langZhItem != null) _langZhItem.Checked = Localization.IsChinese;
+        }
+
+        private readonly List<int> _registeredHotKeyIds = new List<int>();
+
+        private void RegisterConfiguredHotkeys ()
+        {
+            foreach (int id in _registeredHotKeyIds) {
+                HotKeyManager.UnregisterHotKey(id);
+            }
+            _registeredHotKeyIds.Clear();
+
+            HotkeyMode mode = SettingsManager.ReadHotkeyMode();
+            Diagnostics.Write("RegisterConfiguredHotkeys: mode=" + mode
+                + "  screens=" + Screen.AllScreens.Length
+                + "  autoStartup=" + AutoStartup.GetCurrentMode()
+                + "  middleClick=" + TitleBarMover.Enabled
+                + "  lang=" + Localization.CurrentLanguage);
+
+            if (mode == HotkeyMode.WinShiftD || mode == HotkeyMode.Both) {
+                int id = HotKeyManager.RegisterHotKey(Keys.D, KeyModifiers.Windows | KeyModifiers.Shift);
+                _registeredHotKeyIds.Add(id);
+                Diagnostics.Write("registered Win+Shift+D id=" + id);
+            }
+
+            if (mode == HotkeyMode.WinD || mode == HotkeyMode.Both) {
+                int id = HotKeyManager.RegisterHotKey(Keys.D, KeyModifiers.Windows);
+                _registeredHotKeyIds.Add(id);
+                Diagnostics.Write("registered Win+D id=" + id);
+            }
+        }
+
+        private void SetHotkeyMode (HotkeyMode mode)
+        {
+            SettingsManager.WriteHotkeyMode(mode);
+            SettingsManager.Save();
+            RegisterConfiguredHotkeys();
+            RefreshMenuState();
+            Diagnostics.Write("hotkey mode switched to " + mode);
         }
 
         private void ChangeLanguage (string lang)

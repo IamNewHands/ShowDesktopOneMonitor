@@ -52,17 +52,20 @@ Requires .NET Framework 4.8 (built into Windows 10 2004+ and Windows 11).
 ## Installation and Auto-start
 1. Put `ShowDesktopOneMonitor.exe` in a folder you can write to (the diagnostic log lives next to it).
 2. Run the executable and right-click the system tray icon:
+   - **Hotkey**: Select your preferred hotkey under `Hotkey (快捷键)`:
+     - **Win + Shift + D (Default)**: Keeps Windows native full-desktop Win+D unaffected, using Win+Shift+D for per-monitor desktop toggle.
+     - **Win + D (Override System)**: Intercepts native Win+D to toggle only the monitor where the cursor is.
+     - **Both**: Enables both Win+Shift+D and Win+D.
    - **Language**: Switch between English and Simplified Chinese under `Language (语言)`. The menu updates immediately and persists across restarts.
    - **Middle-click window moving switch**: Toggle `Move window with middle click` on or off anytime.
    - **Auto-start options**: Choose under `Start with Windows`:
      - **Normal user (Registry)**: Written to HKCU Run key. Starts with normal user privileges without UAC prompts.
      - **Administrator (Task Scheduler, no UAC)**: Registers an elevated task in Windows Task Scheduler (`HighestAvailable` run level). Starts elevated automatically at logon with **zero UAC prompts** (requires confirming UAC only once when enabling). Allows moving windows belonging to elevated administrator apps.
      - **Disabled**: Clears both registry and task scheduler auto-start entries.
-   - **About & Auto-Update**: Click `About` to view app info, feature guides, and usage instructions. Click `Check for Updates` to check GitHub releases, download updates automatically, and smoothly restart the application into the latest version.
+   - **About & Auto-Update**: Click `About` to view app info, feature guides, and usage instructions. Click `Check for Updates` to check GitHub releases (v1.1+), download updates automatically, and smoothly restart the application into the latest version.
 
 ## Usage
-Press *Win + D* to minimize/restore windows **on monitor where cursor is currently on**.
-*Win + Shift + D* keeps working as well.
+Press *Win + Shift + D* (default) or *Win + D* (switchable via tray menu) to minimize/restore windows **on monitor where cursor is currently on**.
 
 The minimize/restore animation always lands on the **bottom edge of the monitor the cursor
 is on**: windows drop straight down into the taskbar and grow back up. It never slides

@@ -34,6 +34,10 @@ namespace ShowDesktopOneMonitor
         public static string AutoStartDisabled => IsChinese ? "关闭" : "Disabled";
         public static string AutoStartNormal => IsChinese ? "普通权限（注册表）" : "Normal user (Registry)";
         public static string AutoStartAdmin => IsChinese ? "管理员权限（计划任务免 UAC）" : "Administrator (Task Scheduler, no UAC)";
+        public static string HotkeyMenu => IsChinese ? "快捷键 (Hotkey)" : "Hotkey (快捷键)";
+        public static string HotkeyWinShiftD => IsChinese ? "Win + Shift + D (默认)" : "Win + Shift + D (Default)";
+        public static string HotkeyWinD => IsChinese ? "Win + D (覆盖系统)" : "Win + D (Override System)";
+        public static string HotkeyBoth => IsChinese ? "两者均支持 (Win+Shift+D 与 Win+D)" : "Both (Win+Shift+D & Win+D)";
         public static string LanguageMenu => IsChinese ? "语言 (Language)" : "Language (语言)";
         public static string About => IsChinese ? "关于" : "About";
         public static string Exit => IsChinese ? "退出" : "Exit";
@@ -42,7 +46,7 @@ namespace ShowDesktopOneMonitor
         public static string CheckForUpdates => IsChinese ? "检查更新" : "Check for Updates";
         public static string CheckingUpdates => IsChinese ? "正在检查更新..." : "Checking for updates...";
         public static string AlreadyLatest => IsChinese ? "当前已是最新版本" : "You are on the latest version";
-        public static string NewVersionFound => IsChinese ? "发现新版本 (Build #{0})，是否立即下载并更新？" : "New version available (Build #{0}). Download and update now?";
+        public static string NewVersionFound => IsChinese ? "发现新版本 {0}，是否立即下载并更新？" : "New version {0} is available. Download and update now?";
         public static string DownloadingUpdate => IsChinese ? "正在下载更新 ({0}%)..." : "Downloading update ({0}%)...";
         public static string UpdateDownloadComplete => IsChinese ? "下载完成，正在重启应用..." : "Download complete. Restarting...";
         public static string UpdateFailed => IsChinese ? "更新失败" : "Update failed";

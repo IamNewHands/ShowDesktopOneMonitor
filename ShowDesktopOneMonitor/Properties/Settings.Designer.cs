@@ -98,5 +98,17 @@ namespace ShowDesktopOneMonitor.Properties {
                 this["Language"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int HotkeyMode {
+            get {
+                return ((int)(this["HotkeyMode"]));
+            }
+            set {
+                this["HotkeyMode"] = value;
+            }
+        }
     }
 }

@@ -14,10 +14,8 @@ namespace ShowDesktopOneMonitor
     {
         public bool Success { get; set; }
         public bool HasUpdate { get; set; }
-        public string RemoteSha { get; set; }
-        public string RemoteRunNumber { get; set; }
-        public string LocalSha => BuildInfo.CommitSha;
-        public string LocalRunNumber => BuildInfo.BuildNumber;
+        public string RemoteVersion { get; set; }
+        public string LocalVersion => "v" + BuildInfo.Version;
         public string ErrorMessage { get; set; }
     }
 
@@ -27,7 +25,7 @@ namespace ShowDesktopOneMonitor
     /// </summary>
     internal static class AppUpdateManager
     {
-        public const string ReleasePageUrl = "https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/tag/latest-build";
+        public const string ReleaseLatestUrl = "https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest";
         public const string DownloadUrl = "https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest/download/ShowDesktopOneMonitor.exe";
 
         public static async Task<UpdateCheckResult> CheckForUpdatesAsync ()
@@ -37,27 +35,73 @@ namespace ShowDesktopOneMonitor
                 UpdateCheckResult result = new UpdateCheckResult();
                 try {
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                    using (WebClient client = new WebClient()) {
-                        client.Headers.Add("User-Agent", "ShowDesktopOneMonitor-Updater");
-                        string html = client.DownloadString(ReleasePageUrl);
+                    string targetTag = null;
 
-                        Match shaMatch = Regex.Match(html, @"Automatically built from <code>([0-9a-fA-F]{40})</code>");
-                        Match runMatch = Regex.Match(html, @"workflow run [^#]*#?(\d+)");
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ReleaseLatestUrl);
+                    req.Method = "HEAD";
+                    req.UserAgent = "ShowDesktopOneMonitor-Updater";
+                    req.AllowAutoRedirect = false;
+                    req.Timeout = 10000;
 
-                        if (!shaMatch.Success) {
-                            result.Success = false;
-                            result.ErrorMessage = "Unable to locate build SHA in latest release.";
-                            return result;
+                    try {
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) {
+                            string location = resp.Headers["Location"];
+                            if (!string.IsNullOrEmpty(location)) {
+                                Match m = Regex.Match(location, @"/releases/tag/([^/?#\s]+)", RegexOptions.IgnoreCase);
+                                if (m.Success) {
+                                    targetTag = m.Groups[1].Value;
+                                }
+                            }
+                            if (string.IsNullOrEmpty(targetTag) && resp.ResponseUri != null) {
+                                Match m = Regex.Match(resp.ResponseUri.AbsoluteUri, @"/releases/tag/([^/?#\s]+)", RegexOptions.IgnoreCase);
+                                if (m.Success) {
+                                    targetTag = m.Groups[1].Value;
+                                }
+                            }
                         }
-
-                        result.RemoteSha = shaMatch.Groups[1].Value.ToLowerInvariant();
-                        result.RemoteRunNumber = runMatch.Success ? runMatch.Groups[1].Value : "unknown";
-
-                        string localSha = BuildInfo.CommitSha.ToLowerInvariant();
-                        // If commit SHA is different, an update is available
-                        result.HasUpdate = !string.Equals(result.RemoteSha, localSha, StringComparison.OrdinalIgnoreCase);
-                        result.Success = true;
                     }
+                    catch (WebException wex) when (wex.Response is HttpWebResponse wr && ((int)wr.StatusCode >= 300 && (int)wr.StatusCode < 400)) {
+                        string location = wr.Headers["Location"];
+                        if (!string.IsNullOrEmpty(location)) {
+                            Match m = Regex.Match(location, @"/releases/tag/([^/?#\s]+)", RegexOptions.IgnoreCase);
+                            if (m.Success) {
+                                targetTag = m.Groups[1].Value;
+                            }
+                        }
+                    }
+
+                    // Fallback: if HEAD failed or tag not found, download page HTML
+                    if (string.IsNullOrEmpty(targetTag)) {
+                        using (WebClient client = new WebClient()) {
+                            client.Headers.Add("User-Agent", "ShowDesktopOneMonitor-Updater");
+                            string html = client.DownloadString(ReleaseLatestUrl);
+                            Match m = Regex.Match(html, @"/releases/tag/([^""'/?#\s]+)", RegexOptions.IgnoreCase);
+                            if (m.Success) {
+                                targetTag = m.Groups[1].Value;
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(targetTag)) {
+                        result.Success = false;
+                        result.ErrorMessage = "Unable to locate latest release tag.";
+                        return result;
+                    }
+
+                    result.RemoteVersion = targetTag.Trim();
+                    Version vRemote = ParseVersion(result.RemoteVersion);
+                    Version vLocal = ParseVersion(BuildInfo.Version);
+
+                    if (vRemote != null && vLocal != null) {
+                        result.HasUpdate = vRemote > vLocal;
+                    }
+                    else {
+                        // Fallback comparison
+                        result.HasUpdate = !string.Equals(result.RemoteVersion, "v" + BuildInfo.Version, StringComparison.OrdinalIgnoreCase)
+                                        && !string.Equals(result.RemoteVersion, BuildInfo.Version, StringComparison.OrdinalIgnoreCase);
+                    }
+
+                    result.Success = true;
                 }
                 catch (Exception ex) {
                     Diagnostics.Write("CheckForUpdatesAsync failed", ex);
@@ -66,6 +110,16 @@ namespace ShowDesktopOneMonitor
                 }
                 return result;
             });
+        }
+
+        private static Version ParseVersion (string tag)
+        {
+            if (string.IsNullOrEmpty(tag)) return null;
+            Match m = Regex.Match(tag, @"\d+(\.\d+)+");
+            if (m.Success && Version.TryParse(m.Value, out Version v)) {
+                return v;
+            }
+            return null;
         }
 
         public static void DownloadAndApplyUpdateAsync (Action<int> onProgress, Action<Exception> onError)

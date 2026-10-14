@@ -26,7 +26,7 @@ jobs:
         run: |
           $sha = "${{ github.sha }}"
           $run = "${{ github.run_number }}"
-          $code = "namespace ShowDesktopOneMonitor`r`n{`r`n    internal static class BuildInfo`r`n    {`r`n        public const string CommitSha = `"$sha`";`r`n        public const string BuildNumber = `"$run`";`r`n    }`r`n}"
+          $code = "namespace ShowDesktopOneMonitor`r`n{`r`n    internal static class BuildInfo`r`n    {`r`n        public const string Version = `"1.1`";`r`n        public const string CommitSha = `"$sha`";`r`n        public const string BuildNumber = `"$run`";`r`n    }`r`n}"
           Set-Content -Path ShowDesktopOneMonitor/BuildInfo.cs -Value $code -Encoding UTF8
 
       - name: Build (Release, net48)
@@ -63,8 +63,16 @@ jobs:
       - name: Generate release notes
         shell: pwsh
         run: |
-          $commitMsg = git log -1 --pretty=format:"%s%n%n%b"
-          $notes = "Automatically built from `${{ github.sha }}` (workflow run #${{ github.run_number }}).`r`n`r`n### 变更说明 / What's Changed`r`n$commitMsg`r`n`r`n---`r`n- 包含单文件: ``ShowDesktopOneMonitor.exe```r`n- 运行环境: .NET Framework 4.8 (Windows 10 2004+ 与 Windows 11 自带)"
+          $sha = "${{ github.sha }}"
+          $shortSha = $sha.Substring(0, [Math]::Min(7, $sha.Length))
+          $run = "${{ github.run_number }}"
+          $header = "Automatically built from `${shortSha}` (workflow run #${run}).`r`n"
+          if (Test-Path release_notes.md) {
+            $existing = Get-Content release_notes.md -Raw -Encoding UTF8
+            $notes = $header + "`r`n" + $existing
+          } else {
+            $notes = $header
+          }
           Set-Content -Path release_notes.md -Value $notes -Encoding UTF8
 
       # A single rolling release. It is reused on every build and the asset is
@@ -73,8 +81,8 @@ jobs:
       - name: Publish the newest exe to the rolling release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-build
-          name: Latest build (Windows 11)
+          tag_name: v1.1
+          name: ShowDesktopOneMonitor v1.1
           body_path: release_notes.md
           files: ShowDesktopOneMonitor/bin/Release/net48/ShowDesktopOneMonitor.exe
           make_latest: true
