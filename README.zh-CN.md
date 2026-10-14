@@ -38,12 +38,11 @@ Windows 11 的钩子改法参考了
 
 ## 下载
 
-从滚动 release 里取 `ShowDesktopOneMonitor.exe`：
-<https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest>
+从 Releases 页面获取最新版 `ShowDesktopOneMonitor.exe`：
+- 最新版本下载：<https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest>
+- 历史版本列表：<https://github.com/IamNewHands/ShowDesktopOneMonitor/releases>
 
-每次向 `master` 推送都会重新编译，并覆盖这唯一一个 release 里的资产 —— 永远只有一个
-release，里面永远只有最新那个 exe。**Actions** 页签下另有一份完整 zip（exe +
-`.exe.config` + README），制品名为 `ShowDesktopOneMonitor-win11`，需要配置文件时取它。
+后续每个新版本均会发布独立的 Release 并完整保留历史版本记录。**Actions** 页签下另有一份完整 zip（exe + `.exe.config` + README），制品名为 `ShowDesktopOneMonitor-win11`，需要配置文件时取它。
 
 需要 .NET Framework 4.8（Windows 10 2004+ 与 Windows 11 自带）。
 

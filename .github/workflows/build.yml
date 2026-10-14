@@ -22,12 +22,19 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Stamp build info
+        id: stamp_info
         shell: pwsh
         run: |
+          $content = Get-Content ShowDesktopOneMonitor/BuildInfo.cs -Raw
+          $version = "1.1"
+          if ($content -match 'Version\s*=\s*"([^"]+)"') {
+            $version = $matches[1]
+          }
           $sha = "${{ github.sha }}"
           $run = "${{ github.run_number }}"
-          $code = "namespace ShowDesktopOneMonitor`r`n{`r`n    internal static class BuildInfo`r`n    {`r`n        public const string Version = `"1.1`";`r`n        public const string CommitSha = `"$sha`";`r`n        public const string BuildNumber = `"$run`";`r`n    }`r`n}"
+          $code = "namespace ShowDesktopOneMonitor`r`n{`r`n    internal static class BuildInfo`r`n    {`r`n        public const string Version = `"$version`";`r`n        public const string CommitSha = `"$sha`";`r`n        public const string BuildNumber = `"$run`";`r`n    }`r`n}"
           Set-Content -Path ShowDesktopOneMonitor/BuildInfo.cs -Value $code -Encoding UTF8
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build (Release, net48)
         run: dotnet build ShowDesktopOneMonitor/ShowDesktopOneMonitor.csproj -c Release
@@ -64,7 +71,7 @@ jobs:
         shell: pwsh
         run: |
           $sha = "${{ github.sha }}"
-          $shortSha = $sha.Substring(0, [Math]::Min(7, $sha.Length))
+          $shortSha = if ($sha.Length -ge 7) { $sha.Substring(0, 7) } else { $sha }
           $run = "${{ github.run_number }}"
           $header = "Automatically built from `${shortSha}` (workflow run #${run}).`r`n"
           if (Test-Path release_notes.md) {
@@ -75,14 +82,14 @@ jobs:
           }
           Set-Content -Path release_notes.md -Value $notes -Encoding UTF8
 
-      # A single rolling release. It is reused on every build and the asset is
-      # replaced, so there is never more than one release and it always holds
-      # only the newest exe.
-      - name: Publish the newest exe to the rolling release
+      # Creates or updates a release for the current version (e.g. v1.1).
+      # Subsequent new versions publish new releases, and all historical releases
+      # are preserved in the repository.
+      - name: Publish version release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1
-          name: ShowDesktopOneMonitor v1.1
+          tag_name: v${{ steps.stamp_info.outputs.version }}
+          name: ShowDesktopOneMonitor v${{ steps.stamp_info.outputs.version }}
           body_path: release_notes.md
           files: ShowDesktopOneMonitor/bin/Release/net48/ShowDesktopOneMonitor.exe
           make_latest: true

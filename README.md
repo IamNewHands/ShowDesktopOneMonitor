@@ -39,13 +39,11 @@ manifest/DPI work.
 
 ## Download
 
-Take `ShowDesktopOneMonitor.exe` from the rolling release:
-<https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest>
+Get the latest `ShowDesktopOneMonitor.exe` from Releases:
+- Latest Release: <https://github.com/IamNewHands/ShowDesktopOneMonitor/releases/latest>
+- All Releases & History: <https://github.com/IamNewHands/ShowDesktopOneMonitor/releases>
 
-Every push to `master` rebuilds it and replaces that single release's asset - there is
-only ever one release, and it always holds the newest exe. The **Actions** tab keeps a full
-zip (exe + `.exe.config` + README) under the `ShowDesktopOneMonitor-win11` artifact, in case
-you also want the config file.
+Every subsequent new version publishes an independent Release and all historical releases are preserved in the repository. The **Actions** tab keeps a full zip (exe + `.exe.config` + README) under the `ShowDesktopOneMonitor-win11` artifact, in case you also want the config file.
 
 Requires .NET Framework 4.8 (built into Windows 10 2004+ and Windows 11).
 
