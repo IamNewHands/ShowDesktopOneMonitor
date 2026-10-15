@@ -13,9 +13,18 @@ namespace ShowDesktopOneMonitor
         private Button btnCheckUpdate;
         private Button btnClose;
 
-        public AboutForm ()
+        public AboutForm (bool justUpdated = false)
         {
             InitializeComponent();
+            if (justUpdated) {
+                SetUpdateSuccess();
+            }
+        }
+
+        public void SetUpdateSuccess ()
+        {
+            lblStatus.Text = string.Format(Localization.UpdateCompleted, BuildInfo.Version);
+            lblStatus.ForeColor = Color.FromArgb(16, 124, 65);
         }
 
         private void InitializeComponent ()
@@ -26,7 +35,7 @@ namespace ShowDesktopOneMonitor
             this.MinimizeBox = false;
             this.ShowInTaskbar = true;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.ClientSize = new Size(580, 550);
+            this.ClientSize = new Size(580, 560);
             this.BackColor = Color.White;
             this.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
@@ -101,15 +110,15 @@ namespace ShowDesktopOneMonitor
             // Bottom Action Panel
             Panel bottomPanel = new Panel {
                 Dock = DockStyle.Bottom,
-                Height = 70,
+                Height = 88,
                 BackColor = Color.FromArgb(248, 249, 250),
-                Padding = new Padding(16, 10, 16, 10)
+                Padding = new Padding(16, 8, 16, 8)
             };
 
             lblStatus = new Label {
                 Text = "",
-                Location = new Point(16, 14),
-                Size = new Size(316, 24),
+                Location = new Point(16, 8),
+                Size = new Size(548, 24),
                 Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleLeft,
                 ForeColor = Color.FromArgb(60, 60, 60),
@@ -117,16 +126,16 @@ namespace ShowDesktopOneMonitor
             };
 
             progressBar = new ProgressBar {
-                Location = new Point(16, 42),
-                Size = new Size(316, 12),
+                Location = new Point(16, 46),
+                Size = new Size(306, 22),
                 Visible = false,
                 Style = ProgressBarStyle.Continuous
             };
 
             btnCheckUpdate = new Button {
                 Text = Localization.CheckForUpdates,
-                Size = new Size(136, 38),
-                Location = new Point(338, 16),
+                Size = new Size(136, 36),
+                Location = new Point(338, 40),
                 BackColor = Color.FromArgb(0, 120, 215),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
@@ -137,8 +146,8 @@ namespace ShowDesktopOneMonitor
 
             btnClose = new Button {
                 Text = Localization.Close,
-                Size = new Size(84, 38),
-                Location = new Point(482, 16),
+                Size = new Size(84, 36),
+                Location = new Point(482, 40),
                 BackColor = Color.FromArgb(235, 236, 239),
                 ForeColor = Color.Black,
                 FlatStyle = FlatStyle.Flat,

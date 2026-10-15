@@ -189,9 +189,9 @@ namespace ShowDesktopOneMonitor
                 + ")\r\n"
                 + "move /y \"" + newExePath + "\" \"" + currentExe + "\" >nul\r\n"
                 + "if errorlevel 1 (\r\n"
-                + "    powershell -NoProfile -Command \"Start-Process cmd -ArgumentList '/c move /y \\\"\"" + newExePath + "\\\"\" \\\"\"" + currentExe + "\\\"\" & start \\\"\"\\\"\" \\\"\"" + currentExe + "\\\"\"' -Verb RunAs\"\r\n"
+                + "    powershell -NoProfile -Command \"Start-Process cmd -ArgumentList '/c move /y \\\"\"" + newExePath + "\\\"\" \\\"\"" + currentExe + "\\\"\" & start \\\"\"\\\"\" \\\"\"" + currentExe + "\\\"\" --updated' -Verb RunAs\"\r\n"
                 + ") else (\r\n"
-                + "    start \"\" \"" + currentExe + "\"\r\n"
+                + "    start \"\" \"" + currentExe + "\" --updated\r\n"
                 + ")\r\n"
                 + "del \"%~f0\"\r\n";
 

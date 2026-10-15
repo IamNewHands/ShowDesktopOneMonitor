@@ -57,6 +57,11 @@ namespace ShowDesktopOneMonitor
             MinimizeAnimation.Enable();
 
             Diagnostics.Write("startup complete, waiting for the hot key");
+
+            if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--updated", StringComparison.OrdinalIgnoreCase))) {
+                Diagnostics.Write("Detected --updated flag; showing About dialog with update complete status");
+                ShowAboutForm(justUpdated: true);
+            }
         }
 
         private MenuItem _loggingItem;
@@ -129,13 +134,16 @@ namespace ShowDesktopOneMonitor
 
         private AboutForm _aboutForm = null;
 
-        private void ShowAboutForm ()
+        private void ShowAboutForm (bool justUpdated = false)
         {
             if (_aboutForm == null || _aboutForm.IsDisposed) {
-                _aboutForm = new AboutForm();
+                _aboutForm = new AboutForm(justUpdated);
                 _aboutForm.Show();
             }
             else {
+                if (justUpdated) {
+                    _aboutForm.SetUpdateSuccess();
+                }
                 _aboutForm.BringToFront();
                 _aboutForm.Activate();
             }

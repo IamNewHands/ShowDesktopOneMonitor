@@ -50,6 +50,7 @@ namespace ShowDesktopOneMonitor
         public static string DownloadingUpdate => IsChinese ? "正在下载更新 ({0}%)..." : "Downloading update ({0}%)...";
         public static string UpdateDownloadComplete => IsChinese ? "下载完成，正在重启应用..." : "Download complete. Restarting...";
         public static string UpdateFailed => IsChinese ? "更新失败" : "Update failed";
+        public static string UpdateCompleted => IsChinese ? "更新已完成，当前版本为 v{0}" : "Update completed! Current version: v{0}";
         public static string Close => IsChinese ? "关闭" : "Close";
         public static string CurrentVersion => IsChinese ? "当前版本: " : "Current version: ";
         public static string LatestVersion => IsChinese ? "最新版本: " : "Latest version: ";
