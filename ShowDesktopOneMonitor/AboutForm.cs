@@ -108,15 +108,17 @@ namespace ShowDesktopOneMonitor
 
             lblStatus = new Label {
                 Text = "",
-                Location = new Point(16, 16),
-                Size = new Size(310, 20),
-                ForeColor = Color.FromArgb(70, 70, 70),
+                Location = new Point(16, 14),
+                Size = new Size(316, 24),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.FromArgb(60, 60, 60),
                 AutoEllipsis = true
             };
 
             progressBar = new ProgressBar {
-                Location = new Point(16, 40),
-                Size = new Size(310, 14),
+                Location = new Point(16, 42),
+                Size = new Size(316, 12),
                 Visible = false,
                 Style = ProgressBarStyle.Continuous
             };
@@ -200,27 +202,27 @@ namespace ShowDesktopOneMonitor
         {
             btnCheckUpdate.Enabled = false;
             lblStatus.Text = Localization.CheckingUpdates;
-            lblStatus.ForeColor = Color.FromArgb(70, 70, 70);
+            lblStatus.ForeColor = Color.FromArgb(60, 60, 60);
 
             UpdateCheckResult result = await AppUpdateManager.CheckForUpdatesAsync();
 
             if (!result.Success) {
                 lblStatus.Text = Localization.UpdateFailed + ": " + result.ErrorMessage;
-                lblStatus.ForeColor = Color.FromArgb(200, 30, 30);
+                lblStatus.ForeColor = Color.FromArgb(196, 43, 28);
                 btnCheckUpdate.Enabled = true;
                 return;
             }
 
             if (!result.HasUpdate) {
                 lblStatus.Text = string.Format(Localization.AlreadyLatest + " (v{0})", BuildInfo.Version);
-                lblStatus.ForeColor = Color.FromArgb(0, 130, 50);
+                lblStatus.ForeColor = Color.FromArgb(16, 124, 65);
                 btnCheckUpdate.Enabled = true;
                 return;
             }
 
             // New version found
             lblStatus.Text = string.Format(Localization.NewVersionFound, result.RemoteVersion);
-            lblStatus.ForeColor = Color.FromArgb(0, 102, 204);
+            lblStatus.ForeColor = Color.FromArgb(0, 90, 190);
 
             string promptMsg = string.Format(Localization.NewVersionFound, result.RemoteVersion);
             DialogResult dr = MessageBox.Show(this, promptMsg, Localization.AboutTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Information);
@@ -248,7 +250,7 @@ namespace ShowDesktopOneMonitor
                             {
                                 progressBar.Visible = false;
                                 lblStatus.Text = Localization.UpdateFailed + ": " + error.Message;
-                                lblStatus.ForeColor = Color.FromArgb(200, 30, 30);
+                                lblStatus.ForeColor = Color.FromArgb(196, 43, 28);
                                 btnCheckUpdate.Enabled = true;
                                 btnClose.Enabled = true;
                             }));
