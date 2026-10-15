@@ -58,8 +58,18 @@ namespace ShowDesktopOneMonitor
 
             Diagnostics.Write("startup complete, waiting for the hot key");
 
-            if (Environment.GetCommandLineArgs().Any(a => string.Equals(a, "--updated", StringComparison.OrdinalIgnoreCase))) {
-                Diagnostics.Write("Detected --updated flag; showing About dialog with update complete status");
+            // Two independent signals, because neither one covers every update:
+            //  - the updater hands "--updated" to the executable it restarts (v1.1.4 and
+            //    later). Only the outgoing build can send it, so it is the one signal that
+            //    can cover the update which installs the version record below;
+            //  - the recorded version differs from the running one. That also covers the
+            //    elevated fallback path in the updater, where the switch does not survive
+            //    the command line, and any start the updater did not launch at all.
+            bool restartedByUpdater = Environment.GetCommandLineArgs()
+                .Any(a => string.Equals(a, "--updated", StringComparison.OrdinalIgnoreCase));
+            bool versionChanged = UpdateState.TakeJustUpdated();
+
+            if (restartedByUpdater || versionChanged) {
                 ShowAboutForm(justUpdated: true);
             }
         }

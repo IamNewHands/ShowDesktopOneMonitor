@@ -8,6 +8,7 @@ namespace ShowDesktopOneMonitor
 {
     internal class AboutForm : Form
     {
+        private Panel bottomPanel;
         private Label lblStatus;
         private ProgressBar progressBar;
         private Button btnCheckUpdate;
@@ -108,7 +109,7 @@ namespace ShowDesktopOneMonitor
             topPanel.Controls.Add(headerTextPanel);
 
             // Bottom Action Panel
-            Panel bottomPanel = new Panel {
+            bottomPanel = new Panel {
                 Dock = DockStyle.Bottom,
                 Height = 88,
                 BackColor = Color.FromArgb(248, 249, 250),
@@ -178,6 +179,45 @@ namespace ShowDesktopOneMonitor
             this.Controls.Add(contentPanel);
             this.Controls.Add(bottomPanel);
             this.Controls.Add(topPanel);
+        }
+
+        // GDI+ draws the text at the monitor's DPI while this hand-built layout keeps its
+        // 96-DPI pixel numbers: the 9.5 pt status line is 17 px tall at 96 DPI but 34 px at
+        // 200%. WinForms does not rescale a hand-built layout in a PerMonitorV2 process -
+        // the window is created on the primary monitor, so it never receives
+        // WM_DPICHANGED - so the fixed 24 px status row cut the glyphs off at the bottom on
+        // a 200% monitor. Size the rows of the bottom panel from the font they hold instead,
+        // here, where the monitor the window landed on is known.
+        protected override void OnHandleCreated (EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyBottomPanelMetrics();
+        }
+
+        private void ApplyBottomPanelMetrics ()
+        {
+            float statusLineHeight;
+            float buttonLineHeight;
+            using (Graphics g = Graphics.FromHwnd(this.Handle)) {
+                statusLineHeight = lblStatus.Font.GetHeight(g);
+                buttonLineHeight = btnCheckUpdate.Font.GetHeight(g);
+            }
+
+            // 24, 36, 88 and the offsets are the 96-DPI design values; the maxima keep the
+            // dialog identical on a 100% monitor and only grow the rows that would clip.
+            int statusHeight = Math.Max(24, (int)Math.Ceiling(statusLineHeight) + 6);
+            int buttonHeight = Math.Max(36, (int)Math.Ceiling(buttonLineHeight) + 10);
+            int buttonTop = lblStatus.Location.Y + statusHeight + 8;
+            int progressTop = lblStatus.Location.Y + statusHeight + 14;
+            int panelHeight = Math.Max(88, Math.Max(progressTop + progressBar.Height, buttonTop + buttonHeight) + 12);
+
+            lblStatus.Size = new Size(lblStatus.Width, statusHeight);
+            progressBar.Location = new Point(progressBar.Location.X, progressTop);
+            btnCheckUpdate.Location = new Point(btnCheckUpdate.Location.X, buttonTop);
+            btnCheckUpdate.Size = new Size(btnCheckUpdate.Width, buttonHeight);
+            btnClose.Location = new Point(btnClose.Location.X, buttonTop);
+            btnClose.Size = new Size(btnClose.Width, buttonHeight);
+            bottomPanel.Height = panelHeight;
         }
 
         private int AddFeatureCard (Panel container, int y, string title, string desc)
