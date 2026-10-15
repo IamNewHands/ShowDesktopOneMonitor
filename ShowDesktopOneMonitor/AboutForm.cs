@@ -177,7 +177,7 @@ namespace ShowDesktopOneMonitor
                 AutoSize = true
             };
             container.Controls.Add(lblCardTitle);
-            y += 22;
+            y += Math.Max(lblCardTitle.Height, lblCardTitle.PreferredHeight) + 6;
 
             Label lblCardDesc = new Label {
                 Text = desc,
@@ -189,7 +189,7 @@ namespace ShowDesktopOneMonitor
                 MaximumSize = new Size(510, 0)
             };
             container.Controls.Add(lblCardDesc);
-            y += lblCardDesc.PreferredHeight + 14;
+            y += Math.Max(lblCardDesc.Height, lblCardDesc.PreferredHeight) + 16;
 
             return y;
         }
