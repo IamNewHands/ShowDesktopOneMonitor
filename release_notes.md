@@ -1,3 +1,13 @@
+### 变更说明 / What's Changed in v1.1.2
+
+#### 1. 顶部面板自适应与 GitHub 仓库链接防遮挡 (Header Auto-Size & Link Visibility)
+- **头部容器高度自适应**：将关于窗口顶部面板改为 `AutoSize` 动态扩展模式（保底最小高度 115px），彻底解决高 DPI / 字体缩放（125%+）下 GitHub 仓库链接被下方的白底内容面板遮挡切断的问题。
+
+#### 2. 底部按钮尺寸与文字防贴边截断优化 (Button Dimension & Padding Polish)
+- **按键高度与居中微调**：「检查更新」与「关闭」按钮高度由 34px 增大为 38px，水平宽度适配为 136px / 84px，并严格居中于底部面板（上下留白各 16px），彻底消除中文字符（如“更”、“新”、“闭”）底部笔画因紧贴按键下边缘导致的截断感。
+
+---
+
 ### 变更说明 / What's Changed in v1.1.1
 
 #### 修复关于窗口功能介绍文字截断 (Fix About Dialog Text Truncation)

@@ -26,7 +26,7 @@ namespace ShowDesktopOneMonitor
             this.MinimizeBox = false;
             this.ShowInTaskbar = true;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.ClientSize = new Size(580, 530);
+            this.ClientSize = new Size(580, 550);
             this.BackColor = Color.White;
             this.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
@@ -39,14 +39,16 @@ namespace ShowDesktopOneMonitor
             // Top Header Panel
             Panel topPanel = new Panel {
                 Dock = DockStyle.Top,
-                Height = 105,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(0, 115),
                 BackColor = Color.FromArgb(248, 249, 250),
-                Padding = new Padding(16, 12, 16, 12)
+                Padding = new Padding(16, 14, 16, 14)
             };
 
             PictureBox picIcon = new PictureBox {
                 Size = new Size(48, 48),
-                Location = new Point(16, 20),
+                Location = new Point(16, 18),
                 SizeMode = PictureBoxSizeMode.StretchImage
             };
             if (this.Icon != null) {
@@ -57,7 +59,7 @@ namespace ShowDesktopOneMonitor
                 Text = "ShowDesktopOneMonitor",
                 Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
                 AutoSize = true,
-                Margin = new Padding(0, 0, 0, 5)
+                Margin = new Padding(0, 0, 0, 4)
             };
 
             Label lblVersion = new Label {
@@ -65,11 +67,12 @@ namespace ShowDesktopOneMonitor
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular),
                 ForeColor = Color.FromArgb(90, 90, 90),
                 AutoSize = true,
-                Margin = new Padding(0, 0, 0, 5)
+                Margin = new Padding(0, 0, 0, 4)
             };
 
             LinkLabel linkGitHub = new LinkLabel {
                 Text = "GitHub Repository",
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
                 AutoSize = true,
                 Margin = new Padding(0, 0, 0, 0)
             };
@@ -82,8 +85,7 @@ namespace ShowDesktopOneMonitor
             };
 
             FlowLayoutPanel headerTextPanel = new FlowLayoutPanel {
-                Location = new Point(74, 15),
-                Size = new Size(480, 80),
+                Location = new Point(74, 14),
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoSize = true,
@@ -106,23 +108,23 @@ namespace ShowDesktopOneMonitor
 
             lblStatus = new Label {
                 Text = "",
-                Location = new Point(16, 12),
-                Size = new Size(320, 20),
+                Location = new Point(16, 16),
+                Size = new Size(310, 20),
                 ForeColor = Color.FromArgb(70, 70, 70),
                 AutoEllipsis = true
             };
 
             progressBar = new ProgressBar {
-                Location = new Point(16, 36),
-                Size = new Size(320, 14),
+                Location = new Point(16, 40),
+                Size = new Size(310, 14),
                 Visible = false,
                 Style = ProgressBarStyle.Continuous
             };
 
             btnCheckUpdate = new Button {
                 Text = Localization.CheckForUpdates,
-                Size = new Size(130, 34),
-                Location = new Point(346, 18),
+                Size = new Size(136, 38),
+                Location = new Point(338, 16),
                 BackColor = Color.FromArgb(0, 120, 215),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
@@ -133,8 +135,8 @@ namespace ShowDesktopOneMonitor
 
             btnClose = new Button {
                 Text = Localization.Close,
-                Size = new Size(80, 34),
-                Location = new Point(484, 18),
+                Size = new Size(84, 38),
+                Location = new Point(482, 16),
                 BackColor = Color.FromArgb(235, 236, 239),
                 ForeColor = Color.Black,
                 FlatStyle = FlatStyle.Flat,
