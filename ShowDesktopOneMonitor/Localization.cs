@@ -41,6 +41,10 @@ namespace ShowDesktopOneMonitor
         public static string LanguageMenu => IsChinese ? "语言 (Language)" : "Language (语言)";
         public static string About => IsChinese ? "关于" : "About";
         public static string Exit => IsChinese ? "退出" : "Exit";
+        public static string AlreadyRunningTitle => IsChinese ? "程序已打开" : "Already running";
+        public static string AlreadyRunningMessage => IsChinese
+            ? "ShowDesktopOneMonitor 已经在运行了，不用再打开一个。\r\n\r\n它只保留一个托盘图标，右键那个图标即可操作。"
+            : "ShowDesktopOneMonitor is already running, so a second copy was not started.\r\n\r\nIt keeps a single tray icon - right-click that icon to use it.";
 
         public static string AboutTitle => IsChinese ? "关于 ShowDesktopOneMonitor" : "About ShowDesktopOneMonitor";
         public static string CheckForUpdates => IsChinese ? "检查更新" : "Check for Updates";

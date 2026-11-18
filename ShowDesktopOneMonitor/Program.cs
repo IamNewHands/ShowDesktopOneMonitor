@@ -24,6 +24,19 @@ namespace ShowDesktopOneMonitor
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // Only one copy may run: a second launch would install a duplicate tray icon
+            // and a duplicate keyboard hook, and both copies would fight over the same
+            // per-monitor window state. The second copy says so and leaves.
+            if (!SingleInstance.TryAcquire()) {
+                Diagnostics.Write("=== second instance blocked, a copy is already running");
+                MessageBox.Show(
+                    Localization.AlreadyRunningMessage,
+                    Localization.AlreadyRunningTitle,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
             try {
                 Application.Run(new MainAppContext());
                 Diagnostics.Write("=== message loop returned normally");
